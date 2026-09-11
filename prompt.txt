@@ -1,0 +1,2618 @@
+Prompt sistema de café y restaurante pagos mercadopago y opcion de arca/afip
+Lo que estoy planteando no debería ser simplemente un “sistema de menú QR” ni otro POS. La oportunidad está en diseñar un sistema operativo para cafés y restaurantes, donde menú, pedidos, mesas, cocina, stock, pagos, fidelización, promociones, mozos y analítica sean partes de un mismo circuito.
+
+Hice una investigación inicial sobre el estado actual del mercado y, especialmente, sobre las posibilidades actuales de integración de Mercado Pago. Mercado Pago ya permite integrar POS/Point, QR y pagos online mediante Orders API, con actualización de estados y conciliación; además, el QR puede ser estático, dinámico o híbrido. MMercado Pago+2 Esto permite diseñar algo bastante más sofisticado que simplemente poner un QR en la mesa.
+
+En el mercado internacional, soluciones como Toast, Square, Clover, TouchBistro y Lightspeed ya cubren distintas combinaciones de POS, inventario, cocina, pagos y fidelización; por lo tanto, para competir no conviene intentar hacer simplemente “otro POS”, sino diferenciarse en experiencia de mesa + pedidos concurrentes + inteligencia de stock + pagos flexibles + fidelización + operación extremadamente simple. BBaaDigi+1
+
+A continuación te dejo un prompt maestro que podés darle a una IA de programación para que empiece el proyecto con una visión mucho más profunda.
+
+Actúa como un equipo senior multidisciplinario formado por:
+
+    Arquitecto de software especializado en sistemas SaaS multi-tenant.
+    Ingeniero de backend Node.js.
+    Ingeniero frontend Angular mobile-first.
+    Arquitecto de bases de datos MySQL.
+    Especialista en POS para restaurantes y cafeterías.
+    Especialista en gestión de mesas y comandas.
+    Especialista en inventario y control de stock.
+    Especialista en pagos digitales y Mercado Pago.
+    Especialista en UX/UI mobile-first.
+    Especialista en seguridad informática.
+    Especialista en fidelización y CRM.
+    Especialista en analítica de negocios.
+    Especialista en operaciones gastronómicas.
+    Product Manager especializado en restaurantes.
+    QA senior.
+    DevOps/Cloud engineer.
+
+Tu objetivo es diseñar y comenzar a implementar un producto SaaS superior a un simple menú QR, POS o sistema de comandas.
+
+El producto será una plataforma integral para cafés, bares, restaurantes, cafeterías, food courts y establecimientos gastronómicos.
+
+Debe funcionar como:
+
+    Menú digital.
+    Sistema de pedidos.
+    Sistema de mesas.
+    POS.
+    Gestión de cocina.
+    Gestión de stock.
+    Gestión de compras.
+    Gestión de promociones.
+    CRM.
+    Programa de fidelización.
+    Sistema de pagos.
+    Sistema de delivery/retiro.
+    Gestión de mozos.
+    Gestión de sucursales.
+    Gestión de cajas.
+    Sistema de analítica.
+    Sistema de alertas.
+    Motor de recomendaciones.
+    Sistema antifraude y antimanipulación.
+    Plataforma SaaS multiempresa y multisucursal.
+
+La experiencia debe ser mobile-first y extremadamente sencilla para el cliente.
+
+El principio rector debe ser:
+
+“Que el cliente pueda pedir exactamente lo que quiere, cuando quiere, sin presión, sin esperar innecesariamente y sin confundirse; mientras que el empresario tenga control absoluto sobre operación, stock, ventas, rentabilidad, pagos y clientes.”
+1. FILOSOFÍA DEL PRODUCTO
+
+No diseñes el producto como un software administrativo al que se le agregó un menú QR.
+
+Diseñalo como una plataforma donde todo el circuito gastronómico sea un sistema conectado:
+
+CLIENTE
+↓
+MESA / RETIRO / MOSTRADOR
+↓
+MENÚ
+↓
+PEDIDO
+↓
+VALIDACIÓN DE STOCK
+↓
+COCINA / BARRA
+↓
+PREPARACIÓN
+↓
+ENTREGA
+↓
+CONSUMO
+↓
+PAGO
+↓
+FIDELIZACIÓN
+↓
+ANALÍTICA
+↓
+RECOMENDACIONES
+↓
+NUEVO PEDIDO
+
+Cada etapa debe producir datos útiles para la siguiente.
+
+No permitir que exista una situación donde:
+
+    se venda un producto sin stock;
+    dos clientes consuman simultáneamente el último producto disponible;
+    un producto agotado siga apareciendo como disponible;
+    una promoción genere pérdida involuntaria;
+    un pago figure como cobrado cuando realmente está pendiente;
+    un pedido se pierda;
+    dos mozos atiendan la misma mesa sin saberlo;
+    dos personas de una misma mesa generen pedidos contradictorios;
+    un cliente pague dos veces;
+    una persona modifique una orden sin dejar trazabilidad;
+    una devolución quede sin registrar;
+    una sucursal altere accidentalmente datos de otra sucursal.
+
+2. MODELO SAAS MULTIEMPRESA
+
+La plataforma debe ser multi-tenant desde el comienzo.
+
+Modelo:
+
+PLATFORM
+├── COMPANY
+│ ├── USERS
+│ ├── ROLES
+│ ├── BRANCHES
+│ │ ├── TABLES
+│ │ ├── MENUS
+│ │ ├── STOCK
+│ │ ├── KITCHENS
+│ │ ├── CASH REGISTERS
+│ │ ├── POS TERMINALS
+│ │ └── STAFF
+│ ├── CUSTOMERS
+│ ├── PRODUCTS
+│ ├── RECIPES
+│ ├── ORDERS
+│ ├── PAYMENTS
+│ ├── PROMOTIONS
+│ ├── LOYALTY
+│ └── REPORTS
+
+Nunca mezclar datos entre empresas.
+
+Toda entidad sensible debe pertenecer directa o indirectamente a un tenant.
+
+Implementar:
+
+    tenant_id;
+    branch_id;
+    created_by;
+    updated_by;
+    timestamps;
+    soft delete cuando corresponda;
+    auditoría.
+
+Preparar la arquitectura para miles de empresas.
+3. SUCURSALES
+
+Una empresa puede tener:
+
+    una sucursal;
+    cinco sucursales;
+    cientos de sucursales.
+
+La empresa debe poder administrar:
+
+    menú global;
+    menú particular por sucursal;
+    precios globales;
+    precios por sucursal;
+    stock por sucursal;
+    promociones globales;
+    promociones específicas;
+    empleados;
+    permisos;
+    cajas;
+    mesas;
+    cocinas;
+    dispositivos;
+    métodos de pago.
+
+Ejemplo:
+
+Empresa “Café Central”
+
+Sucursal Centro
+Sucursal Norte
+Sucursal Shopping
+Sucursal Terminal
+
+El producto “Café Latte” puede existir globalmente pero:
+
+Sucursal Centro:
+$4500
+
+Sucursal Shopping:
+$4900
+
+Sucursal Norte:
+$4700
+4. ROLES Y PERMISOS
+
+Diseñar RBAC granular.
+
+Roles iniciales:
+
+    Super Admin de plataforma.
+    Owner.
+    Administrador general.
+    Administrador de sucursal.
+    Encargado.
+    Cajero.
+    Mozo.
+    Cocina.
+    Barra.
+    Stock.
+    Compras.
+    Contabilidad.
+    Auditor.
+    Soporte.
+
+No asumir que un rol puede hacer todo.
+
+Ejemplo:
+
+Un mozo puede:
+
+    ver mesas asignadas;
+    crear pedidos;
+    modificar pedidos según permisos;
+    solicitar cuenta;
+    registrar observaciones.
+
+Pero no debería poder:
+
+    modificar precios;
+    eliminar ventas;
+    modificar stock manualmente;
+    ver rentabilidad;
+    cambiar credenciales de Mercado Pago.
+
+Todo cambio administrativo importante debe quedar auditado.
+5. MESAS
+
+Diseñar un sistema de mesas muy superior al típico:
+
+Mesa 1
+Mesa 2
+Mesa 3
+
+Una mesa debe tener estados:
+
+    libre;
+    reservada;
+    ocupada;
+    pedido en preparación;
+    parcialmente servida;
+    esperando pago;
+    pago parcial;
+    cerrando;
+    cerrada.
+
+Pero además debe existir:
+
+TABLE SESSION.
+
+Una mesa puede tener una sesión.
+
+Ejemplo:
+
+Mesa 12
+
+Session #A9821
+
+Personas:
+
+    Cliente A
+    Cliente B
+    Cliente C
+    Cliente D
+
+Cada persona puede tener identidad anónima o identificada.
+6. EL PROBLEMA CRÍTICO: VARIAS PERSONAS PIDEN A LA VEZ
+
+Este es uno de los puntos más importantes del producto.
+
+No asumir que una mesa equivale a un pedido.
+
+Una mesa debe poder tener:
+
+TABLE SESSION
+├── ORDER A
+├── ORDER B
+├── ORDER C
+└── ORDER D
+
+Ejemplo:
+
+Mesa 8.
+
+Persona A escanea QR.
+
+Pide:
+
+Café + medialuna.
+
+Persona B escanea el mismo QR.
+
+Pide:
+
+Hamburguesa.
+
+Persona C escanea el mismo QR.
+
+Pide:
+
+Cerveza.
+
+El sistema debe entender que los tres pertenecen a la misma sesión de mesa, pero mantienen pedidos individuales.
+
+No deben pisarse.
+
+No deben perderse.
+
+No deben mezclarse accidentalmente.
+7. MODO INDIVIDUAL Y MODO CONJUNTO
+
+Crear dos conceptos:
+
+ORDER MODE:
+
+INDIVIDUAL
+
+o
+
+GROUP.
+Individual
+
+Cada cliente genera su pedido.
+
+Ventajas:
+
+    cada persona sabe qué pidió;
+    cada persona puede pagar lo suyo;
+    facilita dividir la cuenta;
+    permite fidelización individual;
+    permite conocer preferencias.
+
+Grupo
+
+Una persona puede crear un pedido colectivo.
+
+Ejemplo:
+
+“Pedido para toda la mesa”
+
+Todos los productos pertenecen a un pedido común.
+
+El sistema debe permitir cambiar posteriormente el modo de pago.
+8. ¿QUIÉN ESTÁ PIDIENDO?
+
+Cuando una persona entra a la mesa:
+
+Mostrar:
+
+“Estás en Mesa 8.”
+
+Opcionalmente:
+
+“¿Querés pedir para vos o para toda la mesa?”
+
+No obligar al usuario a crear una cuenta.
+
+Debe existir:
+
+GUEST MODE.
+
+El cliente puede usar:
+
+    nombre temporal;
+    nickname;
+    número de asiento opcional;
+    identificación anónima;
+    cuenta registrada.
+
+Nunca hacer obligatorio registrarse antes de pedir.
+
+La conversión a cliente registrado puede ocurrir posteriormente.
+9. AVISO DE OTROS PEDIDOS
+
+Si hay otra persona de la misma mesa pidiendo:
+
+Mostrar discretamente:
+
+“Hay otra persona realizando un pedido en esta mesa.”
+
+Pero no bloquear.
+
+También permitir:
+
+“Ver pedido de la mesa”
+
+según permisos.
+
+Configurar privacidad:
+
+    cada persona ve su pedido;
+    opcionalmente puede ver el pedido común;
+    puede ver el total acumulado;
+    puede no ver productos individuales de otros.
+
+El diseño debe evitar conflictos.
+10. SISTEMA DE ESTADOS DEL PEDIDO
+
+Diseñar una máquina de estados formal.
+
+Ejemplo:
+
+DRAFT
+↓
+SUBMITTED
+↓
+VALIDATING_STOCK
+↓
+CONFIRMED
+↓
+QUEUED
+↓
+PREPARING
+↓
+READY
+↓
+DELIVERED
+↓
+COMPLETED
+
+Estados alternativos:
+
+CANCEL_REQUESTED
+CANCELLED
+PAYMENT_PENDING
+PAYMENT_APPROVED
+PAYMENT_REJECTED
+REFUND_PENDING
+REFUNDED
+
+No utilizar simplemente un campo string sin reglas.
+
+Implementar state machine.
+11. STOCK EN TIEMPO REAL
+
+El stock debe ser uno de los diferenciales principales.
+
+No solamente controlar:
+
+“Hamburguesa = 10”.
+
+Debe existir:
+
+PRODUCT
+RECIPE
+INGREDIENT
+STOCK
+
+Ejemplo:
+
+Hamburguesa Especial
+
+Ingredientes:
+
+Pan x1
+Carne x1
+Queso x2
+Tomate x2
+Lechuga x1
+Salsa x1
+
+Si quedan:
+
+Carne = 3
+
+El sistema debe calcular:
+
+Hamburguesas disponibles = 3.
+
+Si quedan:
+
+Queso = 1
+
+y cada hamburguesa necesita 2:
+
+Hamburguesas disponibles = 0.
+
+El producto debe automáticamente:
+
+    bloquear venta;
+    mostrar agotado;
+    ocultarlo si la configuración lo indica;
+    o permitir lista de espera.
+
+12. RESERVA DE STOCK
+
+Resolver el problema de concurrencia.
+
+Ejemplo:
+
+Stock disponible = 1.
+
+Cliente A agrega producto.
+
+Cliente B agrega producto simultáneamente.
+
+No permitir:
+
+A compra 1
+B compra 1
+
+si solamente existe 1.
+
+Utilizar:
+
+stock_available
+stock_reserved
+stock_sold
+
+y transacciones/bloqueos apropiados.
+
+Diseñar correctamente para concurrencia.
+
+El stock debe reservarse cuando corresponda según la estrategia de negocio.
+
+Liberar reserva si:
+
+    pedido cancelado;
+    pago rechazado;
+    timeout;
+    pedido abandonado.
+
+13. PRODUCTOS COMPUESTOS
+
+Permitir:
+
+    productos simples;
+    productos con receta;
+    combos;
+    variantes;
+    adicionales;
+    modificadores;
+    toppings;
+    tamaños;
+    sabores;
+    temperatura;
+    azúcar;
+    leche;
+    extras;
+    eliminación de ingredientes.
+
+Ejemplo:
+
+Café Latte
+
+Tamaño:
+
+    pequeño;
+    mediano;
+    grande.
+
+Leche:
+
+    entera;
+    descremada;
+    vegetal.
+
+Extra:
+
+    vainilla;
+    caramelo;
+    shot espresso.
+
+Cada variante puede afectar:
+
+    precio;
+    stock;
+    receta;
+    calorías;
+    tiempo de preparación.
+
+14. MENÚ
+
+Diseñar categorías dinámicas.
+
+Ejemplo:
+
+☕ Cafetería
+🥐 Pastelería
+🍔 Hamburguesas
+🥗 Saludable
+🍕 Platos
+🍺 Bebidas
+🍷 Vinos
+🍰 Postres
+
+Permitir:
+
+    orden;
+    imagen;
+    descripción;
+    precio;
+    ingredientes;
+    alérgenos;
+    disponibilidad;
+    horario;
+    sucursal;
+    promociones;
+    etiquetas.
+
+Etiquetas:
+
+    nuevo;
+    recomendado;
+    popular;
+    vegano;
+    sin TACC;
+    picante;
+    oferta;
+    último stock.
+
+15. MENÚ INTELIGENTE
+
+El menú no debe ser estático.
+
+Debe aprender de:
+
+    ventas;
+    horario;
+    stock;
+    clima si posteriormente se integra;
+    día de semana;
+    comportamiento del cliente;
+    productos populares;
+    productos de alta rentabilidad;
+    promociones.
+
+Ejemplo:
+
+8:30 AM:
+
+“☕ Ideal para empezar el día”
+
+11:30:
+
+“🥐 Acompañá tu café”
+
+13:00:
+
+“🍔 Lo más pedido del mediodía”
+
+18:00:
+
+“🍰 Algo dulce para acompañar”
+
+No convertir esto en publicidad invasiva.
+
+La recomendación debe ser contextual y discreta.
+16. RECOMENDACIONES INTELIGENTES
+
+Implementar inicialmente reglas determinísticas.
+
+Posteriormente preparar arquitectura para ML/AI.
+
+Ejemplos:
+
+Cliente pide:
+
+Café.
+
+Sugerir:
+
+“¿Querés agregar una medialuna?”
+
+Cliente pide:
+
+Hamburguesa.
+
+Sugerir:
+
+“Papas + bebida”
+
+Cliente pide:
+
+Torta.
+
+Sugerir:
+
+“Café que combina con este postre.”
+
+Pero tener en cuenta:
+
+    stock;
+    margen;
+    promociones;
+    preferencias;
+    historial;
+    horario;
+    restricciones.
+
+Nunca recomendar algo sin stock.
+
+Nunca recomendar un producto cuya rentabilidad sea mala si existe una alternativa razonable, salvo que el negocio configure esa prioridad.
+17. INTELIGENCIA COMERCIAL
+
+El sistema debe ayudar al empresario.
+
+Crear métricas:
+
+    ventas;
+    ticket promedio;
+    productos más vendidos;
+    productos menos vendidos;
+    margen estimado;
+    ventas por hora;
+    ventas por día;
+    ventas por sucursal;
+    ventas por mozo;
+    ventas por categoría;
+    ventas por mesa;
+    tiempo promedio de preparación;
+    tiempo promedio de entrega;
+    cancelaciones;
+    devoluciones;
+    productos agotados;
+    pérdida por falta de stock;
+    desperdicio;
+    diferencias de inventario.
+
+18. ALERTAS INTELIGENTES
+
+Ejemplos:
+
+“Hoy vendiste 32% más cafés que el promedio de los martes.”
+
+“Tu stock de leche alcanza aproximadamente para 18 cafés.”
+
+“Las medialunas se agotaron 40 minutos antes que ayer.”
+
+“Este producto tiene muchas visitas pero baja conversión.”
+
+“Tenés una caída anormal en ventas de la sucursal Centro.”
+
+“Hay una diferencia de stock que requiere revisión.”
+
+No limitarse a mostrar números.
+
+Convertir datos en decisiones.
+19. PROMOCIONES
+
+Crear motor de promociones.
+
+Tipos:
+
+    descuento porcentual;
+    descuento fijo;
+    2x1;
+    combo;
+    producto gratis;
+    happy hour;
+    descuento por horario;
+    descuento por día;
+    descuento por volumen;
+    promoción por fidelización;
+    promoción personalizada.
+
+Condiciones:
+
+    sucursal;
+    categoría;
+    producto;
+    horario;
+    día;
+    cantidad;
+    cliente;
+    nivel de fidelidad;
+    stock.
+
+Debe existir protección contra promociones acumulativas no deseadas.
+20. FIDELIZACIÓN
+
+Crear sistema de puntos.
+
+Ejemplo:
+
+$1 gastado = 1 punto.
+
+Pero permitir reglas configurables.
+
+Ejemplo:
+
+Café:
+1 punto por $100.
+
+Cumpleaños:
+x2.
+
+Producto promocionado:
+x3.
+
+Crear niveles:
+
+BRONCE
+PLATA
+ORO
+VIP
+
+Beneficios configurables.
+
+Ejemplo:
+
+Bronce:
+1 punto por cada $100.
+
+Plata:
+1.2x puntos.
+
+Oro:
+1.5x.
+
+VIP:
+2x.
+
+Crear:
+
+    puntos obtenidos;
+    puntos utilizados;
+    puntos vencidos;
+    ajustes;
+    promociones;
+    historial.
+
+Nunca modificar puntos directamente sin auditoría.
+21. CRM
+
+El cliente puede tener:
+
+    nombre;
+    teléfono;
+    email;
+    preferencias;
+    historial;
+    frecuencia;
+    ticket promedio;
+    productos favoritos;
+    última compra;
+    sucursal habitual;
+    puntos;
+    nivel;
+    promociones utilizadas.
+
+Segmentos:
+
+    nuevo;
+    frecuente;
+    inactivo;
+    VIP;
+    alto valor;
+    sensible a promociones.
+
+El negocio debe poder consultar:
+
+“Clientes que no compran hace 30 días.”
+22. MODO MOSTRADOR
+
+El sistema debe soportar cafés donde:
+
+    Cliente hace pedido.
+    Paga.
+    Recibe número/dispositivo.
+    Espera. el negocio mantiene una única visión de la venta y su conciliación. Mercado Pago documenta precisamente la asociación entre sucursal, caja y terminal para Point, y la integración
+    Pedido listo.
+    Recibe aviso.
+    Retira.
+
+Crear dos mecanismos:
+
+A) dispositivo físico inalámbrico.
+
+B) aviso digital en teléfono.
+23. COMPETENCIA DEL DISPOSITIVO INALÁMBRICO
+
+No eliminar el dispositivo físico.
+
+Comprender su ventaja.
+
+El dispositivo físico tiene ventajas:
+
+    funciona sin que el cliente mire el teléfono;
+    es visible;
+    reduce incertidumbre;
+    permite alejarse del mostrador;
+    evita acumulación de personas esperando;
+    es intuitivo;
+    no requiere app;
+    transmite sensación de orden.
+
+Pero tiene costos:
+
+    hardware;
+    pérdida;
+    mantenimiento;
+    batería;
+    higiene;
+    inventario;
+    logística;
+    reposición.
+
+La plataforma debe permitir ambos modos.
+Modo físico
+
+Pedido #152
+
+Dispositivo #27
+
+Estado:
+
+PREPARANDO
+
+Luego:
+
+READY
+
+El dispositivo vibra.
+Modo digital
+
+El cliente recibe:
+
+“Tu pedido está listo.”
+
+También:
+
+“Podés retirarlo por mostrador 2.”
+24. DIFERENCIAL SUPERIOR
+
+Crear un concepto:
+
+SMART WAITING.
+
+El cliente no espera físicamente.
+
+Puede:
+
+    sentarse;
+    trabajar;
+    conversar;
+    ir al baño;
+    caminar;
+    relajarse.
+
+El sistema conoce:
+
+    pedido;
+    tiempo estimado;
+    estado;
+    estación;
+    posición de retiro.
+
+Mostrar:
+
+“Tu pedido está siendo preparado.”
+
+Luego:
+
+“Faltan aproximadamente 3 minutos.”
+
+Luego:
+
+“¡Listo! Retiralo en mostrador 2.”
+
+No prometer tiempos imposibles.
+
+Utilizar tiempos históricos reales.
+25. PEDIDOS DESDE LA MESA
+
+El cliente escanea QR.
+
+Pero NO confiar ciegamente en el QR.
+
+Crear:
+
+TABLE QR ID
+
+y:
+
+TABLE SESSION TOKEN.
+
+El QR identifica:
+
+    empresa;
+    sucursal;
+    mesa.
+
+Pero el servidor genera una sesión segura.
+
+No confiar en datos enviados por el navegador.
+
+Validar todo en backend.
+26. SEGURIDAD DEL QR
+
+Analizar ataques:
+
+    QR reemplazado físicamente;
+    QR falso;
+    QR fotografiado;
+    QR reutilizado;
+    manipulación de URL;
+    acceso a otra mesa;
+    modificación de precio;
+    modificación de pedido;
+    replay attack;
+    robo de sesión;
+    acceso a datos de otros clientes.
+
+Diseñar:
+
+    HTTPS obligatorio;
+    tokens firmados;
+    tokens de corta duración cuando corresponda;
+    rotación;
+    validación server-side;
+    rate limiting;
+    protección CSRF cuando aplique;
+    protección XSS;
+    sanitización;
+    validación de DTO;
+    logs;
+    auditoría;
+    detección de anomalías.
+
+Nunca aceptar precio desde frontend.
+
+El backend debe calcular el precio.
+
+Nunca aceptar stock desde frontend.
+
+El backend debe determinar disponibilidad.
+27. QR DINÁMICO Y ESTÁTICO
+
+Preparar arquitectura para:
+
+    QR estático de mesa;
+    QR dinámico;
+    QR híbrido.
+
+No confundir:
+
+QR para identificar mesa
+
+con
+
+QR para pagar.
+
+Son conceptos diferentes.
+
+Mercado Pago soporta modelos estático, dinámico e híbrido para pagos presenciales. Diseñar el sistema para poder aprovechar estas modalidades cuando corresponda.
+28. ALCOHOL Y CONTROL DE EDAD
+
+Crear atributo:
+
+requires_age_verification = true.
+
+Para bebidas alcohólicas:
+
+El pedido puede realizarse.
+
+Pero el sistema debe establecer:
+
+AGE_VERIFICATION_REQUIRED.
+
+El pedido no debe considerarse completamente entregable hasta la verificación correspondiente.
+
+Diseñar diferentes políticas según jurisdicción.
+
+No almacenar innecesariamente documentación sensible.
+
+Permitir al empleado marcar:
+
+AGE_VERIFIED
+
+o
+
+AGE_REJECTED.
+
+Registrar:
+
+    usuario que verificó;
+    fecha;
+    hora;
+    pedido;
+    motivo de rechazo.
+
+La lógica debe ser configurable según legislación aplicable.
+
+No asumir que marcar “soy mayor” es suficiente cuando la legislación o política del negocio exige verificación.
+29. PAGOS
+
+Integrar Mercado Pago como proveedor principal.
+
+Preparar arquitectura para futuros proveedores.
+
+Crear:
+
+PaymentProvider
+
+con adaptadores.
+
+Ejemplo:
+
+MercadoPagoProvider
+FutureProvider
+CashProvider
+CardProvider
+
+No acoplar todo el dominio a Mercado Pago.
+30. MERCADO PAGO
+
+Implementar correctamente:
+
+    Checkout;
+    QR;
+    Point;
+    Orders;
+    webhooks/notificaciones;
+    estados;
+    reembolsos;
+    cancelaciones;
+    conciliación.
+
+La integración debe ocurrir exclusivamente desde backend para secretos y credenciales.
+
+Nunca colocar Access Token privado en Angular.
+
+Mercado Pago indica expresamente que las credenciales privadas deben permanecer seguras en servidor y no exponerse en código client-side.
+
+Preparar:
+
+payment_id
+external_reference
+order_id
+merchant_order_id cuando corresponda
+status
+status_detail
+amount
+currency
+provider
+branch
+cash_register
+created_at
+updated_at
+31. ESTADOS DE PAGO
+
+Diseñar una máquina de estados.
+
+Ejemplo:
+
+CREATED
+↓
+PENDING
+↓
+APPROVED
+↓
+SETTLED
+
+Alternativas:
+
+REJECTED
+CANCELLED
+REFUNDED
+PARTIALLY_REFUNDED
+EXPIRED
+
+Nunca marcar un pago como exitoso solamente porque el frontend volvió de Mercado Pago.
+
+El backend debe confirmar mediante la integración correspondiente.
+
+Utilizar webhooks.
+
+Implementar idempotencia.
+
+Si llega dos veces la misma notificación:
+
+NO DUPLICAR.
+32. CUENTA Y FORMAS DE PAGO
+
+La mesa debe permitir:
+Pago conjunto
+
+Una persona paga todo.
+Pago individual
+
+Cada persona paga lo suyo.
+Pago dividido
+
+Ejemplo:
+
+Total $50.000.
+
+Persona A $20.000.
+Persona B $15.000.
+Persona C $15.000.
+Pago mixto
+
+Parte Mercado Pago.
+Parte efectivo.
+Propinas
+
+Preparar arquitectura para:
+
+    propina fija;
+    porcentaje;
+    propina libre.
+
+No cerrar la mesa hasta resolver correctamente los saldos.
+33. SPLIT DE CUENTA
+
+Este módulo es fundamental.
+
+Cada línea del pedido debe poder estar asociada a:
+
+    participante;
+    grupo;
+    mesa;
+    pedido.
+
+Ejemplo:
+
+ORDER
+
+Café — Juan
+Hamburguesa — Pedro
+Cerveza — Pedro
+Torta — María
+
+Entonces:
+
+Juan paga $4.500.
+Pedro paga $14.000.
+María paga $6.000.
+
+Pero también debe poder:
+
+“Dividir todo en partes iguales.”
+34. CONCILIACIÓN
+
+Crear dashboard:
+
+VENTAS
+PAGOS
+COBROS
+DEVOLUCIONES
+EFECTIVO
+MERCADO PAGO
+POINT
+QR
+
+Comparar:
+
+Venta registrada
+
+vs
+
+Pago confirmado
+
+vs
+
+dinero conciliado.
+
+Detectar:
+
+    venta sin pago;
+    pago sin venta;
+    doble pago;
+    monto diferente;
+    devolución pendiente.
+
+Mercado Pago permite integrar Point con el PDV y automatizar la conciliación de operaciones. MMercado Pago+1
+35. CAJAS
+
+Cada sucursal puede tener múltiples cajas.
+
+Ejemplo:
+
+Sucursal Centro
+
+Caja 1
+Caja 2
+Caja 3
+
+Cada caja debe tener:
+
+    apertura;
+    cierre;
+    responsable;
+    movimientos;
+    ingresos;
+    retiros;
+    diferencias.
+
+Mercado Pago también utiliza el concepto de sucursal + caja/POS para asociar operaciones presenciales. MMercado Pago
+36. MOZOS
+
+El sistema debe permitir asignación de mesas.
+
+Ejemplo:
+
+Mozo Juan:
+
+Mesas 1-5.
+
+Moza María:
+
+Mesas 6-10.
+
+Pero evitar que una asignación rígida sea una limitación.
+
+Permitir:
+
+    asignación principal;
+    cobertura;
+    reasignación;
+    asistencia;
+    encargado.
+
+Cuando entra un pedido:
+
+Notificar al mozo correspondiente.
+37. COCINA Y BARRA
+
+Crear KDS:
+
+Kitchen Display System.
+
+Cada pedido debe poder dividirse por estaciones.
+
+Ejemplo:
+
+Pedido #105
+
+Cocina:
+Hamburguesa.
+
+Barra:
+Cerveza.
+
+Cafetería:
+Café.
+
+Cada estación recibe solamente lo que necesita.
+
+Luego sincronizar:
+
+Cocina READY
+Barra READY
+Café READY
+
+Pedido completo:
+
+READY FOR DELIVERY.
+38. PRIORIDAD DE PEDIDOS
+
+No todos los pedidos tienen la misma prioridad.
+
+Crear:
+
+    normal;
+    urgente;
+    delivery;
+    mesa;
+    retiro;
+    VIP;
+    pedido atrasado.
+
+Pero evitar abusos.
+
+Toda prioridad debe tener reglas.
+39. ESTIMACIÓN DE TIEMPOS
+
+Guardar:
+
+ordered_at
+accepted_at
+started_at
+ready_at
+delivered_at
+completed_at
+
+Calcular:
+
+    tiempo de cola;
+    preparación;
+    espera;
+    entrega.
+
+Usar histórico para mejorar estimaciones.
+40. EXPERIENCIA DEL CLIENTE
+
+El cliente no debe sentir que está utilizando un ERP.
+
+La interfaz debe transmitir:
+
+    calma;
+    confianza;
+    claridad;
+    comodidad;
+    placer;
+    simplicidad.
+
+No saturar con botones.
+
+No mostrar 50 opciones.
+
+La regla:
+
+“Una acción principal por pantalla.”
+
+Ejemplo:
+
+[Agregar al pedido]
+
+Luego:
+
+[Confirmar pedido]
+
+Luego:
+
+[Seguir pedido]
+41. MOBILE FIRST
+
+Diseñar primero para:
+
+    teléfono vertical;
+    navegación con una mano;
+    botones grandes;
+    texto legible;
+    excelente contraste;
+    carga rápida;
+    redes móviles lentas.
+
+Luego adaptar a tablet y desktop.
+
+Angular debe utilizar:
+
+    lazy loading;
+    standalone components;
+    signals cuando aporten valor;
+    reactive forms;
+    interceptors;
+    guards;
+    state management apropiado.
+
+No utilizar una librería de estado gigantesca sin necesidad.
+
+Elegir arquitectura según complejidad real.
+42. ANGULAR
+
+Frontend:
+
+Angular moderno.
+
+Arquitectura:
+
+features/
+├── auth/
+├── menu/
+├── table/
+├── cart/
+├── orders/
+├── payments/
+├── loyalty/
+├── customer/
+├── pos/
+├── kitchen/
+├── inventory/
+├── staff/
+├── reports/
+└── admin/
+
+Separar:
+
+presentation
+application
+domain
+infrastructure
+
+Evitar componentes monolíticos.
+43. BACKEND
+
+Backend:
+
+Node.js + TypeScript.
+
+Framework preferido:
+
+NestJS si aporta estructura y escalabilidad.
+
+Alternativamente Express si existe una razón concreta.
+
+Para este proyecto preferir NestJS por:
+
+    modularidad;
+    DI;
+    guards;
+    interceptors;
+    validación;
+    testing;
+    arquitectura empresarial.
+
+Usar:
+
+REST API inicialmente.
+
+Preparar WebSocket/SSE para:
+
+    pedidos;
+    cocina;
+    stock;
+    pagos;
+    notificaciones.
+
+44. BASE DE DATOS
+
+MySQL.
+
+ORM:
+
+TypeORM si existe una razón concreta.
+
+También evaluar Prisma.
+
+Elegir el ORM que mejor permita:
+
+    transacciones;
+    relaciones;
+    migraciones;
+    rendimiento;
+    mantenimiento;
+    locking;
+    consistencia.
+
+No elegir por moda.
+45. ENTIDADES PRINCIPALES
+
+Diseñar inicialmente:
+
+Tenant
+Branch
+User
+Role
+Permission
+Staff
+Table
+TableSession
+Menu
+MenuCategory
+Product
+ProductVariant
+Modifier
+Recipe
+Ingredient
+Stock
+StockMovement
+StockReservation
+Supplier
+Purchase
+PurchaseItem
+Order
+OrderItem
+OrderParticipant
+KitchenStation
+KitchenTicket
+Payment
+PaymentTransaction
+CashRegister
+CashMovement
+Promotion
+PromotionRule
+LoyaltyAccount
+LoyaltyTransaction
+Customer
+CustomerPreference
+Notification
+AuditLog
+Device
+QRToken
+
+Agregar otras entidades cuando el dominio lo requiera.
+
+No crear tablas innecesarias.
+46. AUDITORÍA
+
+Registrar eventos importantes.
+
+Ejemplo:
+
+Juan cambió precio del café.
+
+María anuló pedido.
+
+Carlos modificó stock.
+
+Pedro realizó devolución.
+
+Guardar:
+
+    actor;
+    fecha;
+    IP cuando corresponda;
+    entidad;
+    acción;
+    valor anterior;
+    valor nuevo;
+    motivo cuando corresponda.
+
+47. ANTI-FRAUDE
+
+Analizar:
+
+    manipulación de precios;
+    duplicación de pedidos;
+    replay;
+    webhooks falsos;
+    pagos duplicados;
+    cupones duplicados;
+    abuso de puntos;
+    stock negativo;
+    acceso cruzado entre tenants;
+    QR falsificado;
+    sesión robada;
+    modificación del pedido después del pago;
+    empleados anulando ventas;
+    devoluciones sospechosas.
+
+Crear reglas de detección.
+48. OBSERVABILIDAD
+
+Implementar:
+
+    logs estructurados;
+    correlation_id;
+    request_id;
+    métricas;
+    health checks;
+    tracing cuando sea necesario;
+    auditoría;
+    errores centralizados.
+
+Debe ser posible seguir:
+
+Cliente → Pedido → Pago → Cocina → Entrega.
+49. NOTIFICACIONES
+
+Preparar:
+
+    push;
+    web push;
+    email;
+    SMS;
+    WhatsApp posteriormente;
+    dispositivo físico;
+    notificación interna.
+
+Crear NotificationService abstracto.
+50. MODO OFFLINE
+
+Analizar cuidadosamente offline.
+
+El cliente no debería poder confirmar alegremente un pedido si no puede garantizarse el estado del stock.
+
+Para POS y operación interna considerar:
+
+    cache;
+    cola local;
+    sincronización;
+    resolución de conflictos.
+
+Definir qué operaciones pueden funcionar offline y cuáles no.
+51. ANALÍTICA AVANZADA
+
+Crear dashboard empresarial.
+
+Indicadores:
+
+GMV
+Revenue
+Average Ticket
+Orders
+Customers
+Repeat Rate
+Retention
+LTV
+Conversion
+Stock Turnover
+Waste
+Food Cost
+Gross Margin
+Preparation Time
+Table Turnover
+Payment Success Rate
+Refund Rate
+
+Permitir filtros:
+
+    empresa;
+    sucursal;
+    período;
+    categoría;
+    producto;
+    mozo;
+    canal;
+    método de pago.
+
+52. DIFERENCIAL PRINCIPAL
+
+No competir solamente por:
+
+“Tenemos QR.”
+
+El posicionamiento debe ser:
+
+“Tu restaurante sabe qué vender, cuándo venderlo, cuánto stock tiene, quién está pidiendo, quién está pagando y qué cliente probablemente vuelva.”
+
+El producto debe unir:
+
+OPERACIÓN + CLIENTE + STOCK + DINERO + INTELIGENCIA.
+53. DOS EXPERIENCIAS PRINCIPALES
+
+Diseñar dos journeys.
+JOURNEY A — MOSTRADOR
+
+Cliente entra.
+
+↓
+Explora menú.
+
+↓
+Pide.
+
+↓
+Paga.
+
+↓
+Recibe dispositivo físico o seguimiento digital.
+
+↓
+Se aleja.
+
+↓
+Pedido listo.
+
+↓
+Recibe aviso.
+
+↓
+Retira.
+
+Objetivo:
+
+ELIMINAR LA ESPERA FÍSICA.
+JOURNEY B — MESA
+
+Cliente escanea QR.
+
+↓
+Sistema identifica sucursal + mesa.
+
+↓
+Crea/recupera Table Session.
+
+↓
+Cliente navega.
+
+↓
+Selecciona productos.
+
+↓
+Sistema valida stock.
+
+↓
+Cliente confirma.
+
+↓
+Pedido entra a operación.
+
+↓
+Cocina/barra prepara.
+
+↓
+Cliente recibe actualización.
+
+↓
+Puede pedir nuevamente.
+
+↓
+Puede solicitar cuenta.
+
+↓
+Puede pagar individualmente o en conjunto.
+
+↓
+Mesa se cierra.
+
+↓
+Cliente recibe puntos.
+54. RECOMPRA INTELIGENTE
+
+Después de la compra:
+
+“No preguntes solamente si le gustó.”
+
+Utilizar comportamiento.
+
+Ejemplo:
+
+Cliente compra café todos los martes.
+
+El sistema puede eventualmente sugerir:
+
+“¿Lo mismo de siempre?”
+
+Pero nunca asumir automáticamente que quiere comprar.
+
+La IA puede detectar patrones:
+
+“Cliente frecuente de café + medialuna.”
+
+Crear shortcuts:
+
+“Repetir pedido.”
+
+Esto debe ser configurable y respetar privacidad.
+55. DISEÑO DE IA
+
+No introducir IA generativa en todo.
+
+Primero:
+
+reglas determinísticas.
+
+Después:
+
+machine learning.
+
+Después:
+
+LLM donde tenga sentido.
+
+Casos adecuados:
+
+    análisis de ventas;
+    explicación de anomalías;
+    sugerencias comerciales;
+    generación de promociones;
+    análisis de comentarios;
+    predicción de demanda;
+    recomendación de productos.
+
+No permitir que un LLM modifique directamente:
+
+    precios;
+    stock;
+    pagos;
+    permisos;
+    devoluciones.
+
+La IA propone.
+
+El sistema valida.
+
+El humano autoriza cuando sea necesario.
+56. ARQUITECTURA DE SEGURIDAD
+
+Aplicar:
+
+OWASP.
+
+Implementar:
+
+    JWT/access tokens;
+    refresh tokens;
+    rotación;
+    hashing seguro;
+    MFA para administradores;
+    RBAC;
+    tenant isolation;
+    rate limiting;
+    CORS;
+    CSP;
+    validación;
+    sanitización;
+    secrets management;
+    HTTPS;
+    webhook verification;
+    idempotency keys;
+    SQL injection prevention;
+    XSS protection;
+    CSRF según arquitectura.
+
+57. API
+
+Diseñar API REST limpia.
+
+Ejemplo:
+
+POST /auth/login
+
+GET /branches
+
+GET /branches/:id/tables
+
+GET /tables/:id/session
+
+POST /table-sessions
+
+GET /menus
+
+GET /menus/:id
+
+POST /orders
+
+GET /orders/:id
+
+POST /orders/:id/cancel
+
+POST /payments
+
+GET /payments/:id
+
+POST /payments/webhook
+
+GET /inventory
+
+POST /inventory/movements
+
+GET /loyalty/account
+
+POST /loyalty/redeem
+
+etc.
+
+Documentar con OpenAPI/Swagger.
+58. TESTING
+
+No entregar solamente código.
+
+Crear:
+
+    unit tests;
+    integration tests;
+    e2e tests;
+    payment tests;
+    concurrency tests;
+    stock tests;
+    authorization tests;
+    tenant isolation tests.
+
+Casos obligatorios:
+Caso 1
+
+Stock = 1.
+
+Dos clientes compran simultáneamente.
+
+Resultado:
+
+Solo uno obtiene el producto.
+Caso 2
+
+Dos clientes pagan simultáneamente.
+
+Resultado:
+
+No existe doble cobro.
+Caso 3
+
+Webhook llega dos veces.
+
+Resultado:
+
+Una sola transacción.
+Caso 4
+
+Cliente intenta modificar precio.
+
+Resultado:
+
+Servidor rechaza.
+Caso 5
+
+Usuario de empresa A intenta acceder a empresa B.
+
+Resultado:
+
+403/404 según política.
+Caso 6
+
+Dos personas piden desde la misma mesa.
+
+Resultado:
+
+Dos pedidos correctamente asociados a una misma TableSession.
+Caso 7
+
+Tres personas pagan parcialmente.
+
+Resultado:
+
+Cuenta correctamente saldada.
+Caso 8
+
+Producto se queda sin stock mientras alguien está viendo el menú.
+
+Resultado:
+
+Backend rechaza venta y frontend actualiza disponibilidad.
+59. UX DE CONCURRENCIA
+
+Este punto debe ser diseñado explícitamente.
+
+Si Juan está pidiendo y María también:
+
+Juan ve:
+
+“María también está realizando un pedido.”
+
+Pero Juan no debe quedar bloqueado.
+
+Si ambos agregan el último producto:
+
+el primero confirmado obtiene la reserva.
+
+El segundo recibe:
+
+“Este producto acaba de agotarse.”
+
+Nunca mostrar un error técnico.
+
+Nunca:
+
+“HTTP 409 Conflict.”
+
+Mostrar lenguaje humano.
+60. SISTEMA DE EVENTOS
+
+Preparar arquitectura orientada a eventos.
+
+Eventos:
+
+OrderCreated
+OrderConfirmed
+StockReserved
+StockReleased
+PaymentCreated
+PaymentApproved
+PaymentRejected
+KitchenStarted
+KitchenReady
+OrderDelivered
+OrderCompleted
+LoyaltyPointsEarned
+LoyaltyPointsRedeemed
+TableOpened
+TableClosed
+
+Inicialmente puede utilizarse arquitectura modular monolítica.
+
+No convertir prematuramente el proyecto en microservicios.
+
+Diseñar módulos desacoplados para poder evolucionar.
+61. ARQUITECTURA RECOMENDADA
+
+Comenzar con:
+
+Angular
++
+Node.js
++
+NestJS
++
+MySQL
++
+Redis cuando sea necesario
++
+WebSockets/SSE
++
+Object Storage para imágenes
++
+Mercado Pago
++
+Docker
+
+Preferir:
+
+MODULAR MONOLITH
+
+antes que microservicios.
+
+Debe quedar preparado para escalar posteriormente.
+62. INFRAESTRUCTURA
+
+Preparar:
+
+Development
+Staging
+Production
+
+Variables de entorno.
+
+Secrets nunca dentro del código.
+
+Docker.
+
+CI/CD.
+
+Backups.
+
+Migraciones.
+
+Logs.
+
+Monitoring.
+
+Health endpoints.
+63. INTERNACIONALIZACIÓN
+
+Inicialmente:
+
+Español argentino.
+
+Preparar:
+
+i18n.
+
+Moneda:
+
+ARS.
+
+Pero diseñar para:
+
+    USD;
+    otras monedas;
+    otros países.
+
+No hardcodear ARS.
+64. IMPUESTOS
+
+No asumir reglas fiscales universales.
+
+Crear configuración por país/jurisdicción.
+
+Preparar:
+
+    impuestos;
+    percepciones;
+    descuentos;
+    comprobantes;
+    facturación electrónica posteriormente.
+
+65. PRIVACIDAD
+
+Recolectar solamente datos necesarios.
+
+Separar:
+
+datos operativos
+
+de
+
+datos personales.
+
+Preparar:
+
+    consentimiento;
+    políticas;
+    eliminación;
+    exportación;
+    retención.
+
+66. DISEÑO DE PRODUCTO
+
+Crear primero wireframes para:
+
+CLIENTE:
+
+    Landing/menu.
+    Categorías.
+    Producto.
+    Personalización.
+    Carrito.
+    Confirmación.
+    Estado pedido.
+    Cuenta.
+    Pago.
+    Fidelización.
+
+EMPRESARIO:
+
+    Dashboard.
+    Ventas.
+    Pedidos.
+    Mesas.
+    Cocina.
+    Stock.
+    Productos.
+    Promociones.
+    Clientes.
+    Fidelización.
+    Pagos.
+    Cajas.
+    Personal.
+    Sucursales.
+    Configuración.
+    Auditoría.
+
+MOZO:
+
+    Mesas.
+    Mesa.
+    Pedido.
+    Estado.
+    Cuenta.
+    Pago.
+    Cierre.
+
+COCINA:
+
+    Pedidos.
+    Prioridad.
+    Preparando.
+    Listo.
+
+67. PRINCIPIO DE NO SOBRECARGAR AL CLIENTE
+
+Nunca hacer que el cliente entienda la arquitectura interna.
+
+El cliente no debe saber qué es:
+
+TableSession
+OrderParticipant
+StockReservation
+PaymentTransaction.
+
+Debe sentir:
+
+“Escaneo → elijo → pido → sigo mi pedido → pago.”
+68. PRINCIPIO DE NO SOBRECARGAR AL EMPLEADO
+
+Un mozo no debe necesitar 20 clicks para cargar un café.
+
+Un cajero no debe necesitar navegar cinco pantallas para cobrar.
+
+Cocina no debe leer una factura.
+
+Cada rol debe recibir solamente la información necesaria.
+69. SISTEMA DE BÚSQUEDA
+
+Permitir buscar:
+
+productos;
+clientes;
+pedidos;
+mesas;
+ventas;
+pagos.
+
+Agregar filtros.
+
+Preparar índices apropiados.
+70. SISTEMA DE CONFIGURACIÓN
+
+Todo lo que pueda variar entre negocios debe ser configurable.
+
+Ejemplos:
+
+    propina;
+    puntos;
+    caducidad de puntos;
+    horarios;
+    impuestos;
+    stock mínimo;
+    promociones;
+    políticas de cancelación;
+    tiempo de reserva;
+    edad mínima;
+    modo de pedido;
+    modo de pago;
+    QR;
+    dispositivos físicos.
+
+71. DIFERENCIADORES COMPETITIVOS
+
+Buscar siempre superar estas categorías:
+
+    POS tradicionales;
+    menús QR;
+    sistemas de comandas;
+    sistemas de kiosco;
+    plataformas de delivery;
+    sistemas de fidelización;
+    sistemas de inventario.
+
+Diferenciadores:
+
+    Table Session inteligente.
+    Pedidos concurrentes desde la misma mesa.
+    Pago individual/conjunto.
+    Stock real basado en recetas.
+    Reserva de stock.
+    Recomendaciones condicionadas por stock.
+    Smart Waiting.
+    Integración dispositivo físico + celular.
+    Fidelización integrada al pedido.
+    Analítica accionable.
+    Multiempresa.
+    Multisucursal.
+    Seguridad de QR.
+    Conciliación de pagos.
+    Arquitectura extensible.
+
+72. NO HACER
+
+No crear:
+
+    microservicios innecesarios;
+    frontend con lógica financiera;
+    stock controlado solamente por frontend;
+    pagos confiados al navegador;
+    estados inconsistentes;
+    tablas gigantescas;
+    permisos hardcodeados;
+    secretos en Angular;
+    promociones sin motor de reglas;
+    puntos sin ledger;
+    stock sin movimientos;
+    pagos sin idempotencia;
+    webhooks sin validación;
+    acceso cruzado entre tenants.
+
+73. ORDEN DE IMPLEMENTACIÓN
+
+No intentes desarrollar todo simultáneamente.
+
+FASE 1 — FOUNDATION
+
+    monorepo;
+    Angular;
+    NestJS;
+    MySQL;
+    autenticación;
+    multi-tenant;
+    roles;
+    sucursales.
+
+FASE 2 — MENÚ
+
+    categorías;
+    productos;
+    variantes;
+    modificadores;
+    precios;
+    disponibilidad.
+
+FASE 3 — MESAS
+
+    mesas;
+    QR;
+    TableSession;
+    pedidos concurrentes.
+
+FASE 4 — PEDIDOS
+
+    carrito;
+    órdenes;
+    estados;
+    cocina;
+    barra.
+
+FASE 5 — STOCK
+
+    ingredientes;
+    recetas;
+    movimientos;
+    reservas;
+    concurrencia.
+
+FASE 6 — PAGOS
+
+    Mercado Pago;
+    Orders;
+    QR;
+    Point;
+    webhooks;
+    conciliación.
+
+FASE 7 — POS
+
+    caja;
+    cobros;
+    devoluciones;
+    cierre.
+
+FASE 8 — CLIENTES
+
+    CRM;
+    historial;
+    preferencias.
+
+FASE 9 — FIDELIZACIÓN
+
+    puntos;
+    niveles;
+    premios.
+
+FASE 10 — INTELIGENCIA
+
+    recomendaciones;
+    analítica;
+    predicción.
+
+FASE 11 — HARDWARE
+
+    dispositivo físico;
+    integración de avisos.
+
+74. REGLA FUNDAMENTAL PARA LA IA PROGRAMADORA
+
+No comiences escribiendo cientos de archivos.
+
+Primero:
+
+    Analiza el dominio.
+    Identifica ambigüedades.
+    Define bounded contexts.
+    Define entidades.
+    Define relaciones.
+    Define estados.
+    Define invariantes.
+    Define permisos.
+    Define eventos.
+    Define API.
+    Define arquitectura.
+    Define estrategia de testing.
+    Define MVP.
+
+Después comienza a programar.
+
+Cada vez que implementes una funcionalidad debes explicar:
+
+    qué problema resuelve;
+    qué entidades toca;
+    qué reglas de negocio aplica;
+    qué riesgos tiene;
+    qué pruebas necesita;
+    cómo afecta a otros módulos.
+
+75. FORMATO DE RESPUESTA DE LA IA PROGRAMADORA
+
+Antes de escribir código:
+A. Arquitectura propuesta
+
+Mostrar arquitectura completa.
+B. Modelo de dominio
+
+Mostrar entidades y relaciones.
+C. Flujos
+
+Mostrar diagramas Mermaid.
+D. Decisiones técnicas
+
+Explicar por qué se eligió cada tecnología.
+E. Riesgos
+
+Mostrar riesgos técnicos y de negocio.
+F. MVP
+
+Definir qué entra y qué queda fuera.
+G. Implementación
+
+Luego comenzar a escribir código.
+
+Cada bloque de código debe ser completo y ejecutable.
+
+No entregar pseudocódigo disfrazado de código.
+
+No dejar:
+
+TODO
+
+FIXME
+
+“implement later”
+
+en funcionalidades críticas.
+76. PRIMER OBJETIVO
+
+Tu primera tarea NO es escribir todo el sistema.
+
+Tu primera tarea es producir:
+
+    Arquitectura general.
+    Arquitectura de módulos.
+    Modelo de dominio.
+    ERD inicial.
+    Estados de Order.
+    Estados de Payment.
+    Estados de TableSession.
+    Flujo de stock.
+    Flujo de pedidos concurrentes.
+    Flujo de pago individual.
+    Flujo de pago conjunto.
+    Flujo Mercado Pago.
+    Modelo multi-tenant.
+    RBAC.
+    Seguridad QR.
+    Arquitectura Angular.
+    Arquitectura NestJS.
+    Estructura MySQL.
+    Plan de testing.
+    Roadmap de implementación.
+
+Después de presentar eso, espera la validación arquitectónica antes de generar todo el código.
+77. CRITERIO FINAL DE ÉXITO
+
+El producto debe conseguir simultáneamente:
+
+PARA EL CLIENTE:
+
+    menos espera;
+    menos fricción;
+    menos presión;
+    menos errores;
+    más autonomía;
+    más comodidad;
+    más claridad;
+    pagos simples;
+    pedidos simples;
+    posibilidad de pedir individualmente;
+    posibilidad de pedir en grupo;
+    posibilidad de pagar individualmente;
+    posibilidad de pagar en conjunto;
+    información clara;
+    fidelización;
+    sensación de control.
+
+PARA EL EMPRESARIO:
+
+    más ventas;
+    mayor ticket promedio;
+    menos errores;
+    menos desperdicio;
+    menos productos vendidos sin stock;
+    mejor rotación;
+    mejor control de caja;
+    mejor conciliación;
+    mejor control de empleados;
+    mayor recurrencia;
+    mayor fidelización;
+    información en tiempo real;
+    control multisucursal;
+    decisiones basadas en datos.
+
+PARA EL EMPLEADO:
+
+    menos tareas repetitivas;
+    menos errores;
+    menos consultas;
+    menos desplazamientos;
+    información clara;
+    pedidos ordenados;
+    prioridades visibles;
+    responsabilidades claras.
+
+La plataforma debe sentirse simple en la superficie y ser extremadamente sofisticada debajo.
+
+El cliente debe ver simplicidad.
+
+El empleado debe ver claridad.
+
+El empresario debe ver control.
+
+El sistema debe encargarse de la complejidad.
+
+Comienza ahora por la arquitectura completa y el modelo de dominio antes de escribir código.
+Una decisión arquitectónica importante
+
+Yo no arrancaría con Angular + Express + TypeORM simplemente porque son tecnologías conocidas. Para este producto consideraría seriamente Angular + Node.js/TypeScript + NestJS + MySQL, con una arquitectura de monolito modular inicialmente.
+
+El motivo es que vas a tener dominios bastante complejos: stock concurrente, pedidos concurrentes, pagos, webhooks, RBAC, multi-tenant, auditoría, mesas y cocina. NestJS aporta una estructura muy adecuada para mantener esos módulos separados sin caer prematuramente en microservicios.
+
+Y hay algo particularmente importante con Mercado Pago: actualmente la documentación contempla Orders API, pagos online y presenciales, Point y QR, y permite recibir actualizaciones del estado de las operaciones. MMercado Pago+1 Por eso conviene diseñar desde el comienzo una capa PaymentProvider, en lugar de meter Mercado Pago directamente dentro de OrderService.
+
+También me parece muy importante no eliminar el aparatito inalámbrico. En realidad, lo convertiría en una ventaja competitiva.
+
+El concepto podría ser:
+
+    “Pedí. Seguí con tu vida. Nosotros te avisamos.”
+
+El dispositivo físico y el celular no deberían competir: deberían ser dos interfaces del mismo motor de Smart Waiting.
+
+Un café podría ofrecer:
+
+    Modo mostrador + dispositivo: pagás, recibís el dispositivo, te sentás y el dispositivo vibra cuando está listo.
+    Modo mostrador + celular: recibís el aviso en el teléfono.
+    Modo mesa: directamente te llevan el pedido.
+    Modo híbrido: algunos productos pueden estar listos mientras otros siguen preparándose.
+
+Eso permite vender una experiencia de “cero espera percibida”, que es bastante más potente que vender simplemente “menú QR”.
+
+Y para Mercado Pago, la arquitectura tiene una ventaja adicional: la plataforma puede contemplar tanto QR como Point, mientras el negocio mantiene una única visión de la venta y su conciliación. Mercado Pago documenta precisamente la asociación entre sucursal, caja y terminal para Point, y la integración de QR mediante Orders. MMercado Pago+1
+
+Documentación oficial de Mercado Pago para integraciones
+
+Mi recomendación: no le entregues todavía a la IA el pedido de “programá todo”. El prompt anterior deliberadamente la obliga primero a resolver modelo de dominio, concurrencia, stock, pagos y sesiones de mesa. Es ahí donde se ganan o pierden este tipo de sistemas; después escribir Angular y NestJS es relativamente sencillo.
+
+Si querés llevar esto un nivel más arriba, el siguiente paso sería convertir este concepto en un documento técnico de arquitectura v1, con el ERD completo de MySQL, las tablas y campos exactos, relaciones, índices, constraints, estados, endpoints REST y diagramas de flujo de los casos difíciles —especialmente dos personas pidiendo simultáneamente desde la misma mesa + stock 1 + pago individual/conjunto + Mercado Pago.

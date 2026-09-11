@@ -1,0 +1,255 @@
+/* Sistema de diseño global — cálido, suave, mobile-first. Pensado primero
+   para el comensal (que entra desde un QR, en el celular, sin elegir la
+   app) y después para staff/admin (tablet/desktop). Nada de colores
+   saturados: paleta café/tierra con acentos apagados, tipografía con un
+   toque serif en los títulos y sans en el resto, radios grandes, sombras
+   livianas en vez de bordes duros, y estados de foco/hover/disabled en
+   todo lo interactivo. */
+
+:root {
+  color-scheme: light dark;
+
+  --bg: #faf7f2;
+  --surface: #ffffff;
+  --surface-2: #f3ede4;
+  --text: #2b241f;
+  --muted: #7a6f62;
+  --border: #e8e0d3;
+  --border-strong: #d8cdbc;
+
+  --primary: #7d5232;
+  --primary-hover: #6a4529;
+  --primary-contrast: #fff8f0;
+  --primary-soft: #f1e3d3;
+
+  --accent: #5c7a63;
+  --accent-soft: #e3ebe2;
+
+  --success: #4c7a5a;
+  --success-soft: #e3efe4;
+  --warning: #a5761f;
+  --warning-soft: #f5ead0;
+  --danger: #b0473a;
+  --danger-soft: #f6e0dc;
+  --info: #4a6f8a;
+  --info-soft: #e2ecf1;
+
+  --shadow-1: 0 1px 2px rgba(43, 36, 31, 0.06), 0 1px 6px rgba(43, 36, 31, 0.05);
+  --shadow-2: 0 4px 16px rgba(43, 36, 31, 0.10), 0 2px 6px rgba(43, 36, 31, 0.06);
+
+  --radius-sm: 8px;
+  --radius: 14px;
+  --radius-lg: 20px;
+  --radius-pill: 999px;
+
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  --font: -apple-system, "Segoe UI", system-ui, Roboto, sans-serif;
+  --font-display: Georgia, "Iowan Old Style", "Palatino Linotype", ui-serif, serif;
+  --tap: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #17130f;
+    --surface: #221c16;
+    --surface-2: #2a231b;
+    --text: #f1e7db;
+    --muted: #b3a595;
+    --border: #3b332a;
+    --border-strong: #4a3f32;
+
+    --primary: #e2ac7b;
+    --primary-hover: #ecbb8e;
+    --primary-contrast: #2a1a0d;
+    --primary-soft: #3a2c1c;
+
+    --accent: #93b89d;
+    --accent-soft: #26302a;
+
+    --success: #86bd97;
+    --success-soft: #24312a;
+    --warning: #dba85a;
+    --warning-soft: #362b19;
+    --danger: #e08d7f;
+    --danger-soft: #3a241f;
+    --info: #8fb6cf;
+    --info-soft: #202b32;
+
+    --shadow-1: 0 1px 2px rgba(0, 0, 0, 0.35), 0 1px 6px rgba(0, 0, 0, 0.25);
+    --shadow-2: 0 6px 20px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* Un data-attribute (futuro selector claro/oscuro manual) pisa el sistema
+   en cualquiera de los dos sentidos, igual que en los artifacts. */
+:root[data-theme="dark"] {
+  --bg: #17130f; --surface: #221c16; --surface-2: #2a231b; --text: #f1e7db; --muted: #b3a595;
+  --border: #3b332a; --border-strong: #4a3f32; --primary: #e2ac7b; --primary-hover: #ecbb8e;
+  --primary-contrast: #2a1a0d; --primary-soft: #3a2c1c; --accent: #93b89d; --accent-soft: #26302a;
+  --success: #86bd97; --success-soft: #24312a; --warning: #dba85a; --warning-soft: #362b19;
+  --danger: #e08d7f; --danger-soft: #3a241f; --info: #8fb6cf; --info-soft: #202b32;
+}
+:root[data-theme="light"] {
+  --bg: #faf7f2; --surface: #ffffff; --surface-2: #f3ede4; --text: #2b241f; --muted: #7a6f62;
+  --border: #e8e0d3; --border-strong: #d8cdbc; --primary: #7d5232; --primary-hover: #6a4529;
+  --primary-contrast: #fff8f0; --primary-soft: #f1e3d3; --accent: #5c7a63; --accent-soft: #e3ebe2;
+  --success: #4c7a5a; --success-soft: #e3efe4; --warning: #a5761f; --warning-soft: #f5ead0;
+  --danger: #b0473a; --danger-soft: #f6e0dc; --info: #4a6f8a; --info-soft: #e2ecf1;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  min-height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+img, svg { max-width: 100%; display: block; }
+
+h1, h2, h3 {
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.25;
+  margin: 0 0 var(--space-2);
+  letter-spacing: -0.01em;
+}
+h1 { font-size: clamp(1.4rem, 1.15rem + 1.1vw, 1.9rem); }
+h2 { font-size: clamp(1.15rem, 1.02rem + 0.6vw, 1.35rem); margin-top: var(--space-5); }
+h3 { font-size: 1.05rem; margin-top: 0; }
+h4 {
+  font-family: var(--font);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--muted);
+  margin: var(--space-4) 0 var(--space-2);
+}
+p { margin: 0 0 var(--space-2); }
+
+a { color: var(--primary); text-underline-offset: 2px; }
+a:hover { color: var(--primary-hover); }
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border-strong);
+  background: var(--surface);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  padding: 0.6rem 1.1rem;
+  min-height: var(--tap);
+  touch-action: manipulation;
+  transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+}
+button:hover { background: var(--surface-2); }
+button:active { transform: translateY(1px); }
+button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+button.primary {
+  background: var(--primary);
+  color: var(--primary-contrast);
+  border-color: transparent;
+  font-weight: 600;
+  box-shadow: var(--shadow-1);
+}
+button.primary:hover:not(:disabled) { background: var(--primary-hover); }
+
+button.danger { border-color: var(--danger); color: var(--danger); background: transparent; }
+button.danger:hover:not(:disabled) { background: var(--danger-soft); }
+
+button.link, a.link {
+  border: none;
+  background: none;
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0.3rem 0.2rem;
+  min-height: auto;
+  border-radius: var(--radius-sm);
+}
+button.link:hover { background: transparent; color: var(--primary-hover); }
+
+input, select, textarea {
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--text);
+  width: 100%;
+  min-height: var(--tap);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+input::placeholder, textarea::placeholder { color: var(--muted); opacity: 0.85; }
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+input:disabled, select:disabled, textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+label { display: block; font-size: 0.85rem; font-weight: 600; color: var(--muted); margin: var(--space-2) 0 var(--space-1); }
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  box-shadow: var(--shadow-1);
+  /* Si una tabla adentro es más ancha que la tarjeta (pantallas chicas),
+     se desliza horizontal en vez de desbordar la página. */
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.muted { color: var(--muted); }
+
+/* Chips de estado — reemplazan cualquier color de badge escrito a mano por
+   página (los había hardcodeados en #eee/#333, que se rompían en oscuro). */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: 2px 9px;
+  border-radius: var(--radius-pill);
+  background: var(--surface-2);
+  color: var(--muted);
+  white-space: nowrap;
+}
+.badge-primary { background: var(--primary-soft); color: var(--primary-hover); }
+.badge-success { background: var(--success-soft); color: var(--success); }
+.badge-warning { background: var(--warning-soft); color: var(--warning); }
+.badge-danger { background: var(--danger-soft); color: var(--danger); }
+.badge-info { background: var(--info-soft); color: var(--info); }
+
+/* Tablas: el scroll horizontal lo da la .card que las contiene (arriba) —
+   así no hace falta tocar cada <td> de cada página del back-office para
+   que quepan en una pantalla chica. */
+table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+th, td { text-align: left; padding: 0.5rem 0.6rem; border-bottom: 1px solid var(--border); white-space: nowrap; }
+th { color: var(--muted); font-weight: 600; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.03em; }
+
+::selection { background: var(--primary-soft); color: var(--text); }

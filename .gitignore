@@ -1,0 +1,20 @@
+node_modules/
+dist/
+.angular/
+out-tsc/
+coverage/
+
+# Secretos — nunca commitear
+.env
+.env.*
+!.env.example
+backend/serviceAccountKey.json
+backend/**/serviceAccountKey.json
+*.pem
+*.key
+
+# Editores / OS
+.DS_Store
+Thumbs.db
+*.log
+bash.exe.stackdump

@@ -1,0 +1,13 @@
+# Angular
+/dist
+/node_modules
+/.angular/cache
+
+# Capacitor / Android — build output y config específica de esta máquina
+# (local.properties tiene la ruta al SDK, no es portable entre PCs).
+/android/app/build
+/android/build
+/android/.gradle
+/android/local.properties
+/android/captures
+/android/.cxx

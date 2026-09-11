@@ -1,0 +1,31 @@
+{
+  "name": "@pedidoscofee/backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Backend monolito modular (Express + mysql2, sin ORM). Camino C.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "migrate": "node migrations/run-sql.js",
+    "migrate:status": "node migrations/run-sql.js --status",
+    "seed": "node seeds/dev-seed.js",
+    "test": "node --test --test-concurrency=1"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^5.1.0",
+    "express-rate-limit": "^7.5.0",
+    "firebase-admin": "^13.0.2",
+    "geoip-lite": "^1.4.10",
+    "helmet": "^8.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "mysql2": "^3.12.0",
+    "ulid": "^2.3.0",
+    "zod": "^3.24.1"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

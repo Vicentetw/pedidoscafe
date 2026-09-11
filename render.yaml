@@ -1,0 +1,57 @@
+services:
+  - type: web
+    name: pedidoscofee-backend
+    runtime: node
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      # ---- Base de datos (Clever Cloud MySQL) ----
+      # Completar a mano en el dashboard de Render con los datos del addon
+      # de Clever Cloud (Information > Connection). NO van en este archivo.
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        sync: false
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      - key: DB_NAME
+        sync: false
+      - key: DB_CONNECTION_LIMIT
+        value: "5"
+      # ---- HTTP ----
+      # PORT lo define Render solo, no hace falta declararlo.
+      - key: PUBLIC_BACKEND_URL
+        sync: false
+      - key: API_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # ---- Firebase Admin ----
+      # JSON completo de la service account en una sola línea (NO el path:
+      # el archivo no está en el repo). Ver guía de deploy.
+      - key: FIREBASE_SERVICE_ACCOUNT
+        sync: false
+      # ---- Sesión de mesa ----
+      - key: SESSION_TOKEN_SECRET
+        generateValue: true
+      - key: SESSION_TOKEN_TTL_HOURS
+        value: "2"
+      # ---- Superficie pública ----
+      - key: TURNSTILE_SECRET
+        sync: false
+      - key: COUNTRY_ALLOWLIST
+        value: AR
+      # ---- MercadoPago ----
+      - key: MP_ACCESS_TOKEN
+        sync: false
+      - key: MP_WEBHOOK_SECRET
+        sync: false
