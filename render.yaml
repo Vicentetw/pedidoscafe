@@ -25,8 +25,11 @@ services:
         sync: false
       - key: DB_NAME
         sync: false
+      # 3, no 5 (el tope real del plan free de Clever Cloud) — deja margen
+      # para una corrida de `migrate` desde otra máquina, un cliente MySQL
+      # abierto, o el solape breve de instancias durante un redeploy.
       - key: DB_CONNECTION_LIMIT
-        value: "5"
+        value: "3"
       # ---- HTTP ----
       # PORT lo define Render solo, no hace falta declararlo.
       - key: PUBLIC_BACKEND_URL
