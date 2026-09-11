@@ -81,6 +81,13 @@ test('CASO OBLIGATORIO 7: tres personas pagan parcialmente -> la cuenta queda co
   assert.equal(after1.paid_amount, after1.total_amount);
   assert.equal(after1.status, 'PAID');
   ctx.session7 = sessId;
+
+  // Bug real de la aceptación: un cobro INDIVIDUAL sólo tocaba el total de
+  // la mesa, nunca el payment_status del pedido de esa persona — quedaba
+  // UNPAID para siempre aunque ya lo hubiera pagado.
+  const [orderRows] = await db.query('SELECT payment_status FROM orders WHERE tenant_id = ? AND session_id = ?', [T, sessId]);
+  assert.ok(orderRows.length >= 3);
+  assert.ok(orderRows.every((o) => o.payment_status === 'PAID'), 'los 3 pedidos quedan marcados PAID tras pagar cada uno su parte');
 });
 
 test('un 4º intento de pago individual sobre una cuenta ya saldada -> rechazado', async () => {

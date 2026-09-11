@@ -86,6 +86,25 @@ async function settleCashPayment(tenantId, sessionId, paymentId, amountCents, co
   return applied;
 }
 
+// GROUP/INDIVIDUAL siempre cobran el saldo COMPLETO (de la mesa o de ese
+// participante, según corresponda) — nunca un monto parcial — así que un
+// cobro exitoso implica que esos pedidos quedaron totalmente cubiertos.
+// Antes esto sólo actualizaba `table_sessions.paid_amount`/`status`, nunca
+// el `payment_status` de cada pedido individual — quedaba en UNPAID para
+// siempre aunque la mesa estuviera saldada (bug real reportado en la
+// aceptación: "debería... marcar el pedido pagado"; de paso afectaba
+// cualquier reporte que filtre por `orders.payment_status = 'PAID'`).
+// SPLIT queda afuera a propósito: un monto arbitrario en partes iguales
+// no se puede atribuir a pedidos puntuales sin inventar una asignación.
+async function markSessionOrdersPaid(tenantId, sessionId, participantId, conn) {
+  const orders = await ordersRepo.listOrders(tenantId, { sessionId, participantId: participantId ?? undefined }, conn);
+  for (const o of orders) {
+    if (o.payment_status !== 'PAID' && !['DRAFT', 'CANCELLED', 'REJECTED_STOCK'].includes(o.status)) {
+      await ordersRepo.setOrderPaymentStatus(tenantId, o.id, 'PAID', conn);
+    }
+  }
+}
+
 function computeGroupAmountCents(session) {
   return toCents(session.total_amount) - toCents(session.paid_amount);
 }
@@ -187,6 +206,7 @@ async function chargeSession(tenantId, sessionId, input, actor) {
 
     if (provider === 'CASH') {
       await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId: input.cashSessionId, actorId: actor.actorId });
+      if (mode !== 'SPLIT') await markSessionOrdersPaid(tenantId, sessionId, participantDbId, conn);
       await enqueue(conn, { tenantId, branchId: session.branch_id, type: 'PaymentApproved', payload: { paymentId, sessionId } });
       return { done: true, paymentId, branchId: session.branch_id };
     }
@@ -337,6 +357,7 @@ async function applyMpPaymentUpdate(tenantId, payment, real, conn) {
       await tablesRepo.lockSession(tenantId, payment.session_id, conn);
       const applied = await applyApprovedAmount(tenantId, payment.session_id, toCents(payment.amount), conn);
       sessionStatus = applied.sessionStatus;
+      if (payment.kind !== 'SESSION_SPLIT') await markSessionOrdersPaid(tenantId, payment.session_id, payment.participant_id, conn);
       if (applied.overpayCents > 0) {
         await repo.createRefund(tenantId, payment.id, {
           amount: fromCents(applied.overpayCents), status: 'PENDING',
