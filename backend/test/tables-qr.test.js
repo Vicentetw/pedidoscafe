@@ -98,6 +98,27 @@ test('un 2º escaneo del MISMO QR recupera la sesión y suma otro participante (
   assert.equal(parts, 2);
 });
 
+test('un nombre repetido en la misma mesa se rechaza (NAME_TAKEN) salvo que confirme "soy yo" (claim)', async () => {
+  const r1 = await post('/api/public/table-sessions', { qrToken: ctx.token, displayName: 'Vicente' });
+  assert.equal(r1.status, 201);
+  const b1 = await r1.json();
+
+  const r2 = await post('/api/public/table-sessions', { qrToken: ctx.token, displayName: '  vicente  ' }); // espacios/mayúsculas no importan
+  assert.equal(r2.status, 409);
+  assert.equal((await r2.json()).code, 'NAME_TAKEN');
+
+  const r3 = await post('/api/public/table-sessions', { qrToken: ctx.token, displayName: 'Vicente', claim: true });
+  assert.equal(r3.status, 201);
+  const b3 = await r3.json();
+  assert.equal(b3.participant.id, b1.participant.id, 'reusa el MISMO participante, no crea uno nuevo');
+
+  const [[{ n: parts }]] = await db.query(
+    'SELECT COUNT(*) n FROM session_participants WHERE tenant_id = ? AND left_at IS NULL AND LOWER(display_name) = ?',
+    [T, 'vicente']
+  );
+  assert.equal(parts, 1, 'sigue habiendo un solo "Vicente" activo, no dos');
+});
+
 test('dos escaneos SIMULTÁNEOS del mismo QR: 1 sesión, 2 participantes, 2 JWT', async () => {
   await db.query('DELETE FROM session_participants WHERE tenant_id = ?', [T]);
   await db.query('UPDATE tables SET current_session_id = NULL WHERE tenant_id = ?', [T]);

@@ -66,11 +66,11 @@ export class TableSessionService {
     );
   }
 
-  async startSession(qrToken: string, displayName: string, turnstileToken?: string) {
+  async startSession(qrToken: string, displayName: string, turnstileToken?: string, claim = false) {
     const res = await firstValueFrom(
       this.http.post<{ token: string; session: any; participant: any; othersPresent: number; table: any; branch: any }>(
         `${this.base}/api/public/table-sessions`,
-        { qrToken, displayName, turnstileToken }
+        { qrToken, displayName, turnstileToken, claim }
       )
     );
     this.saveToken(qrToken, res.token);

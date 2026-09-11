@@ -25,13 +25,19 @@ import { OrderPanel } from './order-panel';
           <p class="muted branch">{{ place().branch }}</p>
 
           <div class="card join-card">
-            <label for="name">¿Cómo te llamás?</label>
-            <input id="name" [(ngModel)]="name" placeholder="Tu nombre" (keyup.enter)="join()" autofocus />
-            <button class="primary block" [disabled]="busy() || !name.trim()" (click)="join()">
-              {{ busy() ? 'Entrando…' : 'Unirme a la mesa' }}
-            </button>
-            @if (othersPresent() > 0) {
-              <p class="muted small">👋 Ya hay {{ othersPresent() }} persona(s) en esta mesa.</p>
+            @if (!nameTaken()) {
+              <label for="name">¿Cómo te llamás?</label>
+              <input id="name" [(ngModel)]="name" placeholder="Tu nombre" (keyup.enter)="join()" autofocus />
+              <button class="primary block" [disabled]="busy() || !name.trim()" (click)="join()">
+                {{ busy() ? 'Entrando…' : 'Unirme a la mesa' }}
+              </button>
+              @if (othersPresent() > 0) {
+                <p class="muted small">👋 Ya hay {{ othersPresent() }} persona(s) en esta mesa.</p>
+              }
+            } @else {
+              <p>Ya hay alguien anotado como <strong>"{{ name }}"</strong> en esta mesa. ¿Sos vos?</p>
+              <button class="primary block" [disabled]="busy()" (click)="join(true)">Sí, soy yo</button>
+              <button class="block" [disabled]="busy()" (click)="nameTaken.set(false)">No, uso otro nombre</button>
             }
           </div>
         </div>
@@ -156,6 +162,7 @@ export class TableSession implements OnInit, OnDestroy {
   readonly error = signal('');
   readonly joined = signal(false);
   readonly othersPresent = signal(0);
+  readonly nameTaken = signal(false);
   readonly place = signal<{ table: string; branch: string }>({ table: '', branch: '' });
   readonly tenantSlug = signal('');
   readonly branchCode = signal('');
@@ -198,16 +205,20 @@ export class TableSession implements OnInit, OnDestroy {
 
   ngOnDestroy() { this.closeStream(); }
 
-  async join() {
+  async join(claim = false) {
     this.busy.set(true);
     this.error.set('');
     try {
-      const res = await this.svc.startSession(this.qrToken, this.name.trim());
+      const res = await this.svc.startSession(this.qrToken, this.name.trim(), undefined, claim);
       this.othersPresent.set(res.othersPresent);
       this.joined.set(true);
       this.subscribe();
     } catch (e: any) {
-      this.error.set(e?.error?.error ?? 'No pudimos abrir la mesa. Probá de nuevo.');
+      if (e?.error?.code === 'NAME_TAKEN') {
+        this.nameTaken.set(true);
+      } else {
+        this.error.set(e?.error?.error ?? 'No pudimos abrir la mesa. Probá de nuevo.');
+      }
     } finally {
       this.busy.set(false);
     }

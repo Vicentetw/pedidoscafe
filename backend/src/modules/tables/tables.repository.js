@@ -215,6 +215,20 @@ async function addParticipant(tenantId, sessionId, { displayName, nickname = nul
   );
   return { id: r.insertId, publicId };
 }
+// Para el aviso de "ya hay alguien anotado con ese nombre" (evita
+// duplicados como "Vicente"/"Vicente"/"vicente " en la misma mesa) —
+// comparación case/espacios-insensible, sólo entre participantes activos
+// (uno que ya se fue no "ocupa" el nombre).
+async function findActiveParticipantByName(tenantId, sessionId, displayName, conn = pool) {
+  const [[row]] = await conn.query(
+    `SELECT id, public_id, display_name FROM session_participants
+      WHERE tenant_id = :tenantId AND session_id = :sessionId AND left_at IS NULL
+        AND LOWER(TRIM(display_name)) = LOWER(TRIM(:displayName))
+      LIMIT 1`,
+    { tenantId, sessionId, displayName }
+  );
+  return row || null;
+}
 async function listParticipants(tenantId, sessionId, conn = pool) {
   const [rows] = await conn.query(
     `SELECT id, public_id, display_name, nickname, seat_no, kind, joined_at, left_at
@@ -260,4 +274,5 @@ module.exports = {
   findActiveSessionByTable, findSessionById, lockSession, setSessionAmounts, findSessionByPublicId, createSession, setSessionStatus,
   assignWaiter, touchSession, listOpenSessions,
   addParticipant, listParticipants, findParticipant, findParticipantByPublicId, removeParticipant,
+  findActiveParticipantByName,
 };

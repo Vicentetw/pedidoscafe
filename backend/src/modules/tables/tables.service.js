@@ -202,11 +202,26 @@ async function startSession(token, input, req) {
     if (TERMINAL.has(session.status)) {
       throw new ConflictError('Esta mesa se cerró recién. Volvé a escanear el código.');
     }
-    const participant = await repo.addParticipant(tenantId, session.id, {
-      displayName,
-      nickname: input.nickname ?? null,
-      seatNo: input.seatNo ?? null,
-    }, conn);
+
+    // Nombre repetido en la misma mesa: no sumar un duplicado silencioso
+    // (bug real reportado — "Vicente"/"Vicente"/"Vicente" cargando pedidos
+    // por separado, ilegible para el mozo). Si la persona ya confirmó
+    // "soy yo" (`claim: true`), reusa ese participante existente en vez de
+    // crear uno nuevo — mismo criterio de confianza que ya tiene el QR
+    // compartido (cualquiera con el link puede anotar cualquier nombre).
+    const existing = await repo.findActiveParticipantByName(tenantId, session.id, displayName, conn);
+    if (existing && !input.claim) {
+      throw new ConflictError(`Ya hay alguien anotado como "${displayName}" en esta mesa.`, {
+        code: 'NAME_TAKEN', details: { displayName },
+      });
+    }
+    const participant = existing && input.claim
+      ? { id: existing.id, publicId: existing.public_id }
+      : await repo.addParticipant(tenantId, session.id, {
+          displayName,
+          nickname: input.nickname ?? null,
+          seatNo: input.seatNo ?? null,
+        }, conn);
 
     if (isNew) {
       await repo.setTableStatus(tenantId, tableId, 'OCCUPIED', session.id, conn);

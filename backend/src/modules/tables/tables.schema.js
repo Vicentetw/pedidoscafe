@@ -45,6 +45,11 @@ const startSessionPublic = z.object({
   nickname: z.string().trim().max(60).optional(),
   seatNo: z.coerce.number().int().min(1).max(50).optional(),
   turnstileToken: z.string().trim().max(4096).optional(),
+  // true = "sí, ya estaba anotado con este nombre, soy yo" — confirmado
+  // por la persona después de ver el aviso de nombre repetido (ver
+  // NAME_TAKEN en tables.service.js). Sin esto, un nombre repetido en la
+  // misma mesa rechaza en vez de sumar un duplicado silencioso.
+  claim: z.boolean().optional(),
 });
 
 // Un comensal ya en la sesión suma a otra persona (mismo dispositivo, p. ej.).
