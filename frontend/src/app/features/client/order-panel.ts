@@ -38,7 +38,15 @@ const STATUS_BADGE: Record<string, string> = {
               }
             </ul>
             @if (o.status === 'DRAFT') {
-              <button class="primary block" [disabled]="!o.items.length || busy()" (click)="submit(o)">Confirmar este pedido</button>
+              @if (confirmingId() === o.id) {
+                <p class="muted small confirm-msg">Estás a punto de pedir esto. Una vez confirmado, cocina ya lo recibe y no se puede sacar solo/a — ¿confirmás?</p>
+                <div class="row">
+                  <button class="primary" [disabled]="busy()" (click)="submit(o)">Sí, confirmar pedido</button>
+                  <button [disabled]="busy()" (click)="confirmingId.set(null)">Modificar</button>
+                </div>
+              } @else {
+                <button class="primary block" [disabled]="!o.items.length || busy()" (click)="confirmingId.set(o.id)">Revisar y confirmar</button>
+              }
             }
           </div>
         }
@@ -146,6 +154,7 @@ export class OrderPanel implements OnInit {
   readonly orders = signal<any>(null);
   readonly menuLoading = signal(true);
   readonly busy = signal(false);
+  readonly confirmingId = signal<number | null>(null);
   readonly error = signal('');
   readonly balance = signal<any>(null);
   readonly hasBalance = () => this.balance() != null;
@@ -242,6 +251,7 @@ export class OrderPanel implements OnInit {
     try {
       await this.svc.submitOrder(order.id);
       this.draftId = null;
+      this.confirmingId.set(null);
       await this.refreshOrders();
       await this.refreshBalance();
       await this.svc.refresh();
