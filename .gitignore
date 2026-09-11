@@ -4,6 +4,9 @@ dist/
 out-tsc/
 coverage/
 
+# Caché local del CLI de Firebase (por deploy, no es código)
+.firebase/
+
 # Secretos — nunca commitear
 .env
 .env.*

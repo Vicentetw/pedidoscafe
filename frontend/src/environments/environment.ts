@@ -3,7 +3,7 @@
 // y por ahora apunta al mismo proyecto (restiapedidos).
 export const environment = {
   production: true,
-  backendUrl: '',
+  backendUrl: 'https://pedidoscafe.onrender.com',
   apiKey: '',
   firebaseConfig: {
     apiKey: 'AIzaSyD0HJo5qbuhxy8r9xlrbGHmE8VuT7lA4yE',

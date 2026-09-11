@@ -182,8 +182,10 @@ export class TableSession implements OnInit, OnDestroy {
       this.place.set({ table: r.table.name || `Mesa ${r.table.code}`, branch: r.branch.name });
       this.tenantSlug.set(r.tenant.slug);
       this.branchCode.set(r.branch.code);
-      // ¿ya hay un token de sesión guardado? (refresh de la pestaña)
-      if (this.svc.token()) {
+      // ¿ya hay un token guardado PARA ESTA MESA (de una visita anterior,
+      // aunque haya cerrado la app)? Si sigue vigente, recupera el mismo
+      // participante en vez de sumar uno nuevo.
+      if (this.svc.loadStoredToken(this.qrToken)) {
         const s = await this.svc.refresh().catch(() => null);
         if (s) { this.joined.set(true); this.subscribe(); }
       }

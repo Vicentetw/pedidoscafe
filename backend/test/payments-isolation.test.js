@@ -71,3 +71,38 @@ test('getPayment(A, <pago de B>) -> no lo encuentra', async () => {
   const [[payB]] = await db.query('SELECT id FROM payments WHERE tenant_id = ?', [TB]);
   await assert.rejects(() => paySvc.getPayment(TA, payB.id));
 });
+
+// Registro de pagos paginado (aceptación real: "pueden haber cientos de
+// pagos en el día" — antes un LIMIT fijo de 100 sin offset se quedaba
+// corto y sin forma de ver el resto).
+test('paySvc.listPayments trae {data, total} y total no baja aunque limit lo recorte', async () => {
+  const full = await paySvc.listPayments(TA, { branchId: a.branchId });
+  assert.ok(full.total >= 1);
+  assert.equal(full.data.length, full.total < 50 ? full.total : 50); // default limit=50
+
+  const capped = await paySvc.listPayments(TA, { branchId: a.branchId, limit: 1 });
+  assert.equal(capped.data.length, 1);
+  assert.equal(capped.total, full.total, 'el total cuenta todo, no sólo la página');
+});
+
+test('paySvc.listPayments respeta offset (paginación real)', async () => {
+  const [p2] = await Promise.all([
+    orderSvc.createOrder(TA, { branchId: a.branchId, channel: 'COUNTER' }, { kind: 'staff' }),
+  ]);
+  await orderSvc.addItem(TA, p2.id, { productCode: 'x', qty: 1 }, { kind: 'staff' });
+  await orderSvc.submitOrder(TA, p2.id, { kind: 'staff' });
+  await paySvc.chargeOrder(TA, p2.id, { provider: 'CASH' }, staff);
+
+  const page1 = await paySvc.listPayments(TA, { branchId: a.branchId, limit: 1, offset: 0 });
+  const page2 = await paySvc.listPayments(TA, { branchId: a.branchId, limit: 1, offset: 1 });
+  assert.notEqual(page1.data[0].id, page2.data[0].id, 'páginas distintas traen filas distintas');
+});
+
+test('paySvc.listPayments filtra por rango de fechas (from/to)', async () => {
+  const farFuture = { from: '2999-01-01', to: '2999-12-31' };
+  const nothing = await paySvc.listPayments(TA, { branchId: a.branchId, ...farFuture });
+  assert.equal(nothing.total, 0, 'un rango de fechas sin pagos reales da 0, no todos los pagos');
+
+  const allTime = await paySvc.listPayments(TA, { branchId: a.branchId, from: '2000-01-01' });
+  assert.ok(allTime.total >= 2, 'un rango que sí cubre hoy trae los pagos reales');
+});

@@ -14,11 +14,13 @@ const charge = requirePermission('payments:charge');
 const staffActor = (req) => ({ actorId: req.appUser?.id ?? null, req });
 
 router.get('/', view, asyncHandler(async (req, res) => {
-  const { sessionId, orderId, branchId, status } = req.query;
-  res.json({ data: await svc.listPayments(req.tenantId, {
+  const { sessionId, orderId, branchId, status, from, to, limit, offset } = req.query;
+  res.json(await svc.listPayments(req.tenantId, {
     sessionId: sessionId ? +sessionId : undefined, orderId: orderId ? +orderId : undefined,
     branchId: branchId ? +branchId : undefined, status: status || undefined,
-  }) });
+    from: from || undefined, to: to || undefined,
+    limit: limit ? Math.min(+limit, 200) : undefined, offset: offset ? +offset : undefined,
+  }));
 }));
 router.get('/:id', view, asyncHandler(async (req, res) => res.json(await svc.getPayment(req.tenantId, +req.params.id))));
 router.post('/:id/refund', requirePermission('payments:refund'), asyncHandler(async (req, res) =>

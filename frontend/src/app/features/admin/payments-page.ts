@@ -10,6 +10,12 @@ interface Balance {
 }
 interface Payment { id: number; public_id: string; kind: string; provider: string; amount: string; status: string; created_at: string; }
 
+const STATUS_LABEL: Record<string, string> = {
+  CREATED: 'Iniciado', PENDING: 'Pendiente', APPROVED: 'Aprobado', SETTLED: 'Acreditado',
+  REJECTED: 'Rechazado', EXPIRED: 'Vencido', CANCELLED: 'Cancelado',
+  REFUNDED: 'Devuelto', PARTIALLY_REFUNDED: 'Devuelto parcial',
+};
+
 // Caja — cobrar mesas abiertas, dividir la cuenta, ver pagos y hacer
 // devoluciones. /admin/caja, permiso payments:charge para cobrar.
 @Component({
@@ -26,77 +32,112 @@ interface Payment { id: number; public_id: string; kind: string; provider: strin
       </select>
     </div>
 
-    @if (reconciliation(); as rec) {
-      <div class="card">
-        <h3>Conciliación</h3>
-        <p class="muted small">A partir del propio registro del sistema (sin cuenta real de MercadoPago conectada todavía).</p>
-        <ul>
-          <li>Pagos pendientes hace rato: {{ rec.stalePending.length }}</li>
-          <li>Pedidos de mostrador entregados sin cobrar: {{ rec.unpaidCounterOrders.length }}</li>
-          <li>Mesas cerradas por la fuerza con saldo: {{ rec.forceClosedWithBalance.length }}</li>
-          <li>Devoluciones pendientes: {{ rec.pendingRefunds.length }}</li>
-        </ul>
-      </div>
-    }
+    <div class="tabs">
+      <button [class.active]="mode() === 'mesas'" (click)="mode.set('mesas')">Mesas abiertas</button>
+      <button [class.active]="mode() === 'historial'" (click)="showHistory()">Historial de pagos</button>
+    </div>
 
-    <div class="cols">
-      <div class="card">
-        <h3>Mesas abiertas</h3>
-        <ul>
-          @for (s of sessions(); track s.id) {
-            <li>
-              <button class="link" [class.sel]="s.id === selected()?.id" (click)="select(s)">
-                Mesa {{ s.table_code }} — {{ s.status }} ({{ s.participant_count }})
-              </button>
-            </li>
-          } @empty { <li class="muted">Ninguna mesa abierta.</li> }
-        </ul>
-      </div>
-
-      @if (selected() && balance(); as bal) {
+    @if (mode() === 'mesas') {
+      @if (reconciliation(); as rec) {
         <div class="card">
-          <h3>Mesa {{ selected()!.table_code }}</h3>
-          <p>Total: {{ bal.currency }} {{ bal.total }} · Pagado: {{ bal.currency }} {{ bal.paid }} · <strong>Falta: {{ bal.currency }} {{ bal.remaining }}</strong></p>
-
-          @if (+bal.remaining > 0) {
-            <div class="row">
-              <button class="primary" [disabled]="busy()" (click)="chargeGroup()">Cobrar todo (efectivo)</button>
-              <input type="number" placeholder="partes" [(ngModel)]="parts" style="max-width:90px" />
-              <button [disabled]="busy()" (click)="splitEqual()">Dividir en partes iguales</button>
-            </div>
-            <h4>Por persona</h4>
-            <ul>
-              @for (p of bal.byParticipant; track p.participantId) {
-                <li>
-                  {{ p.name }}: debe {{ bal.currency }} {{ p.remaining }}
-                  @if (+p.remaining > 0) { <button (click)="chargeIndividual(p.participantId)">Cobrar (efectivo)</button> }
-                </li>
-              }
-            </ul>
-          } @else {
-            <p class="muted">Saldada.</p>
-          }
-
-          <h4>Pagos</h4>
-          <table style="width:100%; border-collapse:collapse;">
-            <thead><tr><th>Cuándo</th><th>Modo</th><th>Medio</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
-            <tbody>
-              @for (p of payments(); track p.id) {
-                <tr>
-                  <td>{{ p.created_at }}</td><td>{{ p.kind }}</td><td>{{ p.provider }}</td><td>{{ p.amount }}</td><td>{{ p.status }}</td>
-                  <td>
-                    @if (p.status === 'APPROVED' || p.status === 'SETTLED') { <button (click)="refund(p)">Devolver</button> }
-                    @if (p.provider === 'MERCADOPAGO' && p.status === 'PENDING') {
-                      <button [disabled]="checking() === p.id" (click)="checkMpStatus(p)">{{ checking() === p.id ? 'Verificando…' : 'Verificar pago' }}</button>
-                    }
-                  </td>
-                </tr>
-              } @empty { <tr><td colspan="6" class="muted">Sin pagos todavía.</td></tr> }
-            </tbody>
-          </table>
+          <h3>Conciliación</h3>
+          <p class="muted small">A partir del propio registro del sistema (sin cuenta real de MercadoPago conectada todavía).</p>
+          <ul>
+            <li>Pagos pendientes hace rato: {{ rec.stalePending.length }}</li>
+            <li>Pedidos de mostrador entregados sin cobrar: {{ rec.unpaidCounterOrders.length }}</li>
+            <li>Mesas cerradas por la fuerza con saldo: {{ rec.forceClosedWithBalance.length }}</li>
+            <li>Devoluciones pendientes: {{ rec.pendingRefunds.length }}</li>
+          </ul>
         </div>
       }
-    </div>
+
+      <div class="cols">
+        <div class="card">
+          <h3>Mesas abiertas</h3>
+          <ul>
+            @for (s of sessions(); track s.id) {
+              <li>
+                <button class="link" [class.sel]="s.id === selected()?.id" (click)="select(s)">
+                  Mesa {{ s.table_code }} — {{ s.status }} ({{ s.participant_count }})
+                </button>
+              </li>
+            } @empty { <li class="muted">Ninguna mesa abierta.</li> }
+          </ul>
+        </div>
+
+        @if (selected() && balance(); as bal) {
+          <div class="card">
+            <h3>Mesa {{ selected()!.table_code }}</h3>
+            <p>Total: {{ bal.currency }} {{ bal.total }} · Pagado: {{ bal.currency }} {{ bal.paid }} · <strong>Falta: {{ bal.currency }} {{ bal.remaining }}</strong></p>
+
+            @if (+bal.remaining > 0) {
+              <div class="row">
+                <button class="primary" [disabled]="busy()" (click)="chargeGroup()">Cobrar todo (efectivo)</button>
+                <input type="number" placeholder="partes" [(ngModel)]="parts" style="max-width:90px" />
+                <button [disabled]="busy()" (click)="splitEqual()">Dividir en partes iguales</button>
+              </div>
+              <h4>Por persona</h4>
+              <ul>
+                @for (p of bal.byParticipant; track p.participantId) {
+                  <li>
+                    {{ p.name }}: debe {{ bal.currency }} {{ p.remaining }}
+                    @if (+p.remaining > 0) { <button (click)="chargeIndividual(p.participantId)">Cobrar (efectivo)</button> }
+                  </li>
+                }
+              </ul>
+            } @else {
+              <p class="muted">Saldada.</p>
+            }
+
+            <h4>Pagos</h4>
+            <table style="width:100%; border-collapse:collapse;">
+              <thead><tr><th>Cuándo</th><th>Modo</th><th>Medio</th><th>Monto</th><th>Estado</th><th></th></tr></thead>
+              <tbody>
+                @for (p of payments(); track p.id) {
+                  <tr>
+                    <td>{{ p.created_at }}</td><td>{{ p.kind }}</td><td>{{ p.provider }}</td><td>{{ p.amount }}</td><td>{{ statusLabel(p.status) }}</td>
+                    <td>
+                      @if (p.status === 'APPROVED' || p.status === 'SETTLED') { <button (click)="refund(p)">Devolver</button> }
+                      @if (p.provider === 'MERCADOPAGO' && p.status === 'PENDING') {
+                        <button [disabled]="checking() === p.id" (click)="checkMpStatus(p)">{{ checking() === p.id ? 'Verificando…' : 'Verificar pago' }}</button>
+                      }
+                    </td>
+                  </tr>
+                } @empty { <tr><td colspan="6" class="muted">Sin pagos todavía.</td></tr> }
+              </tbody>
+            </table>
+          </div>
+        }
+      </div>
+    } @else {
+      <div class="card">
+        <h3>Historial de pagos</h3>
+        <p class="muted small">Todos los pagos de la sucursal, más allá de qué mesa quedó abierta — pensado para revisar el día (pueden ser cientos).</p>
+        <div class="row filters">
+          <label class="flabel">Desde <input type="date" [(ngModel)]="historyFrom" (change)="loadHistory()" /></label>
+          <label class="flabel">Hasta <input type="date" [(ngModel)]="historyTo" (change)="loadHistory()" /></label>
+          <select [(ngModel)]="historyStatus" (ngModelChange)="loadHistory()">
+            <option [ngValue]="''">Todos los estados</option>
+            @for (st of statusOptions; track st) { <option [ngValue]="st">{{ statusLabel(st) }}</option> }
+          </select>
+        </div>
+        <table style="width:100%; border-collapse:collapse;">
+          <thead><tr><th>Cuándo</th><th>Modo</th><th>Medio</th><th>Monto</th><th>Estado</th></tr></thead>
+          <tbody>
+            @for (p of historyPayments(); track p.id) {
+              <tr>
+                <td>{{ p.created_at }}</td><td>{{ p.kind }}</td><td>{{ p.provider }}</td><td>{{ p.amount }}</td><td>{{ statusLabel(p.status) }}</td>
+              </tr>
+            } @empty { <tr><td colspan="5" class="muted">Sin pagos en este rango.</td></tr> }
+          </tbody>
+        </table>
+        <div class="row pager">
+          <button [disabled]="historyOffset === 0" (click)="historyPrev()">‹ Anteriores</button>
+          <span class="muted small">{{ historyRangeLabel() }}</span>
+          <button [disabled]="!historyHasMore()" (click)="historyNext()">Siguientes ›</button>
+        </div>
+      </div>
+    }
   `,
   styles: [`
     .cols { display:grid; grid-template-columns: 260px 1fr; gap:16px; }
@@ -106,6 +147,13 @@ interface Payment { id: number; public_id: string; kind: string; provider: strin
     button.link.sel, button.link:hover { background: var(--border); }
     .row { display:flex; gap:8px; flex-wrap:wrap; margin: 10px 0; align-items:center; }
     h4 { margin: 14px 0 4px; }
+    .tabs { display:flex; gap:6px; margin-bottom: var(--space-4); }
+    .tabs button { border-radius: var(--radius-pill); padding: 0.5rem 1rem; background: var(--surface-2); border-color: transparent; }
+    .tabs button.active { background: var(--primary); color: var(--primary-contrast); }
+    .filters { align-items: flex-end; }
+    .flabel { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
+    .flabel input { width: auto; }
+    .pager { justify-content: space-between; }
   `],
 })
 export class PaymentsPage implements OnInit {
@@ -123,6 +171,54 @@ export class PaymentsPage implements OnInit {
   readonly error = signal('');
   parts = 2;
 
+  // -------- historial de pagos de la sucursal (no sólo la mesa seleccionada)
+  readonly mode = signal<'mesas' | 'historial'>('mesas');
+  readonly historyPayments = signal<Payment[]>([]);
+  readonly historyTotal = signal(0);
+  readonly historyLimit = 50;
+  historyOffset = 0;
+  historyFrom = '';
+  historyTo = '';
+  historyStatus = '';
+  readonly statusOptions = Object.keys(STATUS_LABEL);
+
+  statusLabel(s: string) { return STATUS_LABEL[s] ?? s; }
+
+  showHistory() {
+    this.mode.set('historial');
+    this.historyOffset = 0;
+    this.loadHistory();
+  }
+  loadHistory() {
+    if (!this.branchId()) return;
+    this.historyOffset = 0;
+    this.fetchHistory();
+  }
+  private fetchHistory() {
+    const params = new URLSearchParams({
+      branchId: String(this.branchId()),
+      limit: String(this.historyLimit),
+      offset: String(this.historyOffset),
+    });
+    if (this.historyFrom) params.set('from', this.historyFrom);
+    if (this.historyTo) params.set('to', this.historyTo + ' 23:59:59');
+    if (this.historyStatus) params.set('status', this.historyStatus);
+    this.api.get<{ data: Payment[]; total: number }>(`/api/payments?${params}`).subscribe({
+      next: (r) => { this.historyPayments.set(r.data); this.historyTotal.set(r.total); },
+      error: (e) => this.fail(e, 'No se pudo cargar el historial.'),
+    });
+  }
+  historyHasMore() { return this.historyOffset + this.historyLimit < this.historyTotal(); }
+  historyNext() { this.historyOffset += this.historyLimit; this.fetchHistory(); }
+  historyPrev() { this.historyOffset = Math.max(0, this.historyOffset - this.historyLimit); this.fetchHistory(); }
+  historyRangeLabel() {
+    const total = this.historyTotal();
+    if (!total) return 'Sin pagos';
+    const from = this.historyOffset + 1;
+    const to = Math.min(this.historyOffset + this.historyLimit, total);
+    return `${from}–${to} de ${total}`;
+  }
+
   ngOnInit() {
     this.api.get<{ data: Branch[] }>('/api/platform/branches').subscribe({
       next: (r) => { this.branches.set(r.data); if (r.data[0]) this.pickBranch(r.data[0].id); },
@@ -139,6 +235,7 @@ export class PaymentsPage implements OnInit {
       next: (r) => this.sessions.set(r.data), error: (e) => this.fail(e, 'No se pudieron cargar las mesas.'),
     });
     this.api.get<any>(`/api/payments/reconciliation?branchId=${id}`).subscribe({ next: (r) => this.reconciliation.set(r), error: () => this.reconciliation.set(null) });
+    if (this.mode() === 'historial') this.loadHistory();
   }
   select(s: OpenSession) {
     this.selected.set(s);

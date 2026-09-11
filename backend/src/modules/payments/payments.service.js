@@ -101,8 +101,13 @@ async function getPayment(tenantId, id) {
   const [allocations, transactions] = await Promise.all([repo.listAllocations(tenantId, id), repo.listTransactions(tenantId, id)]);
   return { ...p, allocations, transactions };
 }
+// Con `branchId` (sin sessionId/orderId) es el registro general de pagos —
+// paginado (`limit`/`offset`) porque un local real puede tener cientos de
+// pagos por día. `total` es aparte del `data` para que el frontend arme
+// "mostrando X-Y de N" sin tener que traer todas las filas.
 async function listPayments(tenantId, filters) {
-  return repo.listPayments(tenantId, filters);
+  const [data, total] = await Promise.all([repo.listPayments(tenantId, filters), repo.countPayments(tenantId, filters)]);
+  return { data, total };
 }
 
 // ============================================================ saldo de la mesa

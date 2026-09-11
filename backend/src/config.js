@@ -45,7 +45,15 @@ const config = {
 
   sessionToken: {
     secret: process.env.SESSION_TOKEN_SECRET || 'dev-insecure-session-secret',
-    ttlHours: Number(process.env.SESSION_TOKEN_TTL_HOURS || 2),
+    // Default subido de 2 a 6hs (una comida real puede durar más que 2) —
+    // ahora que el frontend persiste el token en localStorage (no sólo
+    // mientras la pestaña sigue abierta), un TTL corto era la otra mitad
+    // del bug de "se duplican los participantes": aunque no cerrara la
+    // app, a las 2hs el token vencía igual y forzaba un participante
+    // nuevo. El scope del token sigue siendo sólo esa mesa/participante,
+    // así que estirarlo no abre nada nuevo — sólo evita el vencimiento
+    // prematuro de una comida larga.
+    ttlHours: Number(process.env.SESSION_TOKEN_TTL_HOURS || 6),
   },
 
   publicSurface: {

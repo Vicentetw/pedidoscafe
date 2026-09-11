@@ -41,15 +41,39 @@ async function lockPayment(tenantId, id, conn) {
   const [[row]] = await conn.query(`SELECT ${PAYMENT_COLS} FROM payments WHERE tenant_id = :tenantId AND id = :id FOR UPDATE`, { tenantId, id });
   return row || null;
 }
-async function listPayments(tenantId, { sessionId, orderId, branchId, status, limit = 100 } = {}, conn = pool) {
+// `from`/`to` filtran por created_at (fecha o datetime, inclusive de los
+// dos extremos) — con esto alcanza para "los pagos de hoy" o de un rango.
+// `limit`/`offset` paginan: con cientos de pagos por día, un LIMIT fijo sin
+// offset se quedaba corto y sin forma de ver el resto (encontrado en la
+// ronda de aceptación real con el usuario).
+function paymentsWhere({ sessionId, orderId, branchId, status, from, to }) {
   const where = ['tenant_id = :tenantId'];
-  const p = { tenantId, limit: Number(limit) };
+  const p = {};
   if (sessionId) { where.push('session_id = :sessionId'); p.sessionId = sessionId; }
   if (orderId) { where.push('order_id = :orderId'); p.orderId = orderId; }
   if (branchId) { where.push('branch_id = :branchId'); p.branchId = branchId; }
   if (status) { where.push('status = :status'); p.status = status; }
-  const [rows] = await conn.query(`SELECT ${PAYMENT_COLS} FROM payments WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT :limit`, p);
+  if (from) { where.push('created_at >= :from'); p.from = from; }
+  if (to) { where.push('created_at <= :to'); p.to = to; }
+  return { where, p };
+}
+async function listPayments(tenantId, filters = {}, conn = pool) {
+  const { limit = 50, offset = 0 } = filters;
+  const { where, p } = paymentsWhere(filters);
+  p.tenantId = tenantId;
+  p.limit = Number(limit);
+  p.offset = Number(offset);
+  const [rows] = await conn.query(
+    `SELECT ${PAYMENT_COLS} FROM payments WHERE ${where.join(' AND ')} ORDER BY created_at DESC LIMIT :limit OFFSET :offset`,
+    p
+  );
   return rows;
+}
+async function countPayments(tenantId, filters = {}, conn = pool) {
+  const { where, p } = paymentsWhere(filters);
+  p.tenantId = tenantId;
+  const [[row]] = await conn.query(`SELECT COUNT(*) AS n FROM payments WHERE ${where.join(' AND ')}`, p);
+  return row.n;
 }
 async function setPaymentStatus(tenantId, id, status, { statusDetail, providerRef } = {}, conn = pool) {
   const f = ['status = :status'];
@@ -138,7 +162,7 @@ async function sumRefunded(tenantId, paymentId, conn = pool) {
 }
 
 module.exports = {
-  createPayment, findPayment, findPaymentByExternalRef, findPaymentByProviderRef, lockPayment, listPayments, setPaymentStatus,
+  createPayment, findPayment, findPaymentByExternalRef, findPaymentByProviderRef, lockPayment, listPayments, countPayments, setPaymentStatus,
   addAllocation, listAllocations, paidByParticipant,
   addTransaction, listTransactions,
   findWebhookEvent, insertWebhookEvent, markWebhookProcessed,

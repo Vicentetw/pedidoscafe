@@ -4,10 +4,20 @@ import { firstValueFrom } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 // Estado de la sesión de mesa del comensal (superficie sin login). Guarda
-// el table_session_token en sessionStorage para sobrevivir un refresh
-// mientras dura la pestaña. Todas las llamadas a /api/session mandan ese
-// token como Bearer — el interceptor de Firebase no lo pisa (un invitado
-// no tiene sesión de Firebase).
+// el table_session_token en localStorage, con una clave POR MESA (por
+// qrToken) — así, si alguien cierra la pestaña/app y vuelve a entrar con
+// el MISMO link (lo normal: cerró el navegador, volvió más tarde a pedir
+// algo más), recupera SU MISMO participante en vez de sumar uno nuevo.
+// Antes usaba sessionStorage con una clave fija: sobrevivía sólo mientras
+// la pestaña seguía abierta, así que salir y volver a entrar creaba un
+// participante nuevo cada vez — con su propio pedido, inaccesible desde
+// el nuevo participante, y saldos que nunca cerraban (bug real encontrado
+// en la aceptación: "puedo generar 5 nombres Vicente"). El token vence
+// solo a las SESSION_TOKEN_TTL_HOURS igual que antes (el backend lo
+// valida); si venció, se limpia y se vuelve a pedir el nombre — ahí sí
+// hace falta un participante nuevo, no hay forma de evitarlo.
+// Todas las llamadas a /api/session mandan ese token como Bearer — el
+// interceptor de Firebase no lo pisa (un invitado no tiene sesión de Firebase).
 export interface GuestParticipant { id: string; name: string; isYou: boolean; seatNo: number | null; }
 export interface GuestSessionState {
   session: { id: string; status: string; orderMode: 'INDIVIDUAL' | 'GROUP'; total: string; paid: string; currency: string };
@@ -21,23 +31,30 @@ export class TableSessionService {
   private readonly http = inject(HttpClient);
   private readonly base = environment.backendUrl;
 
-  readonly token = signal<string | null>(this.readToken());
+  readonly token = signal<string | null>(null);
   readonly state = signal<GuestSessionState | null>(null);
 
   private key(qrToken: string) { return `pc.session.${qrToken}`; }
   private currentQr: string | null = null;
 
-  private readToken(): string | null {
-    try { return sessionStorage.getItem('pc.session.token'); } catch { return null; }
-  }
-  private saveToken(t: string) {
+  // Se llama ANTES de mostrar la pantalla de "¿cómo te llamás?" — si hay un
+  // token guardado para ESTA mesa, lo carga (todavía no se sabe si sigue
+  // vigente; eso lo confirma el primer refresh()).
+  loadStoredToken(qrToken: string): string | null {
+    this.currentQr = qrToken;
+    let t: string | null = null;
+    try { t = localStorage.getItem(this.key(qrToken)); } catch { /* ignore */ }
     this.token.set(t);
-    try { sessionStorage.setItem('pc.session.token', t); } catch { /* ignore */ }
+    return t;
+  }
+  private saveToken(qrToken: string, t: string) {
+    this.token.set(t);
+    try { localStorage.setItem(this.key(qrToken), t); } catch { /* ignore */ }
   }
   clear() {
     this.token.set(null);
     this.state.set(null);
-    try { sessionStorage.removeItem('pc.session.token'); } catch { /* ignore */ }
+    if (this.currentQr) { try { localStorage.removeItem(this.key(this.currentQr)); } catch { /* ignore */ } }
   }
 
   resolveQr(qrToken: string) {
@@ -56,7 +73,7 @@ export class TableSessionService {
         { qrToken, displayName, turnstileToken }
       )
     );
-    this.saveToken(res.token);
+    this.saveToken(qrToken, res.token);
     await this.refresh();
     return res;
   }
@@ -66,14 +83,24 @@ export class TableSessionService {
     return t ? { Authorization: `Bearer ${t}` } : {};
   }
 
+  // Si el token guardado ya venció (o la mesa se cerró), el backend
+  // devuelve 401/404 — ahí lo limpiamos para no quedar reintentando con un
+  // token muerto en cada llamada; quien use esto vuelve a mostrar la
+  // pantalla de "¿cómo te llamás?" (recién ahí es inevitable un participante
+  // nuevo, porque el anterior ya no es identificable).
   async refresh() {
     const t = this.token();
     if (!t) return null;
-    const s = await firstValueFrom(
-      this.http.get<GuestSessionState>(`${this.base}/api/session`, { headers: this.authHeaders() })
-    );
-    this.state.set(s);
-    return s;
+    try {
+      const s = await firstValueFrom(
+        this.http.get<GuestSessionState>(`${this.base}/api/session`, { headers: this.authHeaders() })
+      );
+      this.state.set(s);
+      return s;
+    } catch (e: any) {
+      if (e?.status === 401 || e?.status === 404) this.clear();
+      throw e;
+    }
   }
 
   async addParticipant(displayName: string) {

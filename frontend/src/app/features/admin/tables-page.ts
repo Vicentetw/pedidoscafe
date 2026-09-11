@@ -3,6 +3,7 @@ import { FormsModule } from '@angular/forms';
 import * as QRCode from 'qrcode';
 import { Api } from '../../core/api';
 import { CurrentUserService } from '../../core/current-user';
+import { SessionOrderDetail } from '../shared/session-order-detail';
 
 interface Branch { id: number; code: string; name: string; }
 interface Table {
@@ -22,7 +23,7 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
 // esto, el token opaco es todo lo que necesita el código QR.
 @Component({
   selector: 'app-tables-page',
-  imports: [FormsModule],
+  imports: [FormsModule, SessionOrderDetail],
   template: `
     <h1>Mesas</h1>
     @if (error()) { <p class="err">{{ error() }}</p> }
@@ -81,20 +82,25 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
 
       <div class="card">
         <h3>Mesas abiertas</h3>
-        <table>
-          <thead><tr><th>Mesa</th><th>Estado</th><th>Modo</th><th>Personas</th><th></th></tr></thead>
-          <tbody>
-            @for (s of sessions(); track s.id) {
-              <tr>
-                <td>{{ s.table_code }}</td><td>{{ s.status }}</td><td>{{ s.order_mode }}</td><td>{{ s.participant_count }}</td>
-                <td class="actions">
-                  <button (click)="close(s)">Cerrar</button>
-                  @if (canForceClose()) { <button class="danger" (click)="forceClose(s)">Cierre forzado</button> }
-                </td>
-              </tr>
-            } @empty { <tr><td colspan="5" class="muted">Ninguna mesa abierta.</td></tr> }
-          </tbody>
-        </table>
+        <ul class="sessions">
+          @for (s of sessions(); track s.id) {
+            <li>
+              <button class="srow" [class.sel]="openSession() === s.id" (click)="toggleSession(s)">
+                <span><strong>Mesa {{ s.table_code }}</strong> · {{ s.status }} · {{ s.order_mode }} · {{ s.participant_count }} persona(s)</span>
+                <span class="chev">{{ openSession() === s.id ? '▲' : '▼' }}</span>
+              </button>
+              @if (openSession() === s.id) {
+                <div class="detail">
+                  <app-session-order-detail [sessionId]="s.id" (changed)="loadSessions()" />
+                  <div class="row">
+                    <button (click)="close(s)">Cerrar</button>
+                    @if (canForceClose()) { <button class="danger" (click)="forceClose(s)">Cierre forzado</button> }
+                  </div>
+                </div>
+              }
+            </li>
+          } @empty { <li class="muted">Ninguna mesa abierta.</li> }
+        </ul>
         <p class="muted small hint">
           "Cerrar" exige que la mesa esté saldada (sin deuda). Si no lo está y hace
           falta liberarla igual (se fueron sin pagar, error de carga, etc.), usá
@@ -114,6 +120,15 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
     .qr-box { display: flex; gap: var(--space-4); align-items: center; flex-wrap: wrap; padding: var(--space-3) 0; }
     .qr-box img { border-radius: var(--radius-sm); background: #fff; padding: 8px; }
     .hint { margin-top: var(--space-3); }
+    .sessions { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+    .srow {
+      width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px solid transparent;
+      text-align: left; font-size: .92rem;
+    }
+    .srow.sel { border-color: var(--primary); }
+    .chev { color: var(--muted); font-size: .75rem; }
+    .detail { padding: var(--space-3) 8px 4px; }
   `],
 })
 export class TablesPage implements OnInit {
@@ -128,6 +143,7 @@ export class TablesPage implements OnInit {
   readonly copied = signal('');
   readonly openQr = signal<number | null>(null);
   readonly qrImg = signal<string | null>(null);
+  readonly openSession = signal<number | null>(null);
 
   nc = ''; nn = ''; ns: number | null = null;
 
@@ -159,6 +175,9 @@ export class TablesPage implements OnInit {
     this.api.get<{ data: OpenSession[] }>(`/api/tables/sessions/open?branchId=${this.branchId()}`).subscribe({
       next: (r) => this.sessions.set(r.data), error: (e) => this.fail(e, 'No se pudieron cargar las sesiones.'),
     });
+  }
+  toggleSession(s: OpenSession) {
+    this.openSession.set(this.openSession() === s.id ? null : s.id);
   }
   addTable() {
     this.error.set('');
@@ -200,13 +219,14 @@ export class TablesPage implements OnInit {
   }
   close(s: OpenSession) {
     this.api.post(`/api/tables/sessions/${s.id}/close`, {}).subscribe({
-      next: () => { this.loadSessions(); this.loadTables(); },
+      next: () => { this.openSession.set(null); this.loadSessions(); this.loadTables(); },
       error: (e) => this.fail(e, e?.error?.error ?? 'No se pudo cerrar (¿saldo pendiente?).'),
     });
   }
   forceClose(s: OpenSession) {
     const reason = prompt('Motivo del cierre forzado:');
     if (reason == null) return;
+    this.openSession.set(null);
     this.api.post(`/api/tables/sessions/${s.id}/force-close`, { reason }).subscribe({
       next: () => { this.loadSessions(); this.loadTables(); },
       error: (e) => this.fail(e, 'No se pudo forzar el cierre.'),
