@@ -55,8 +55,10 @@ const STATUS_BADGE: Record<string, string> = {
         <p class="muted small">Saldo pendiente de la mesa: <strong>{{ balance()?.currency }} {{ balance()?.remaining }}</strong></p>
         @if (payError()) { <p class="err">{{ payError() }}</p> }
         <div class="row">
-          <button class="primary" [disabled]="payBusy()" (click)="pay('INDIVIDUAL')">Pagar mi parte</button>
-          <button [disabled]="payBusy()" (click)="pay('GROUP')">Pagar toda la mesa</button>
+          <button class="primary" [disabled]="payBusy() || !myShare()" (click)="pay('INDIVIDUAL')">
+            Pagar mi parte @if (myShare(); as m) { — {{ balance()?.currency }} {{ m }} }
+          </button>
+          <button [disabled]="payBusy()" (click)="pay('GROUP')">Pagar todo — {{ balance()?.currency }} {{ balance()?.remaining }}</button>
         </div>
         <p class="muted small">Se paga online (MercadoPago).</p>
       </div>
@@ -148,6 +150,14 @@ export class OrderPanel implements OnInit {
   readonly balance = signal<any>(null);
   readonly hasBalance = () => this.balance() != null;
   readonly remaining = () => Number(this.balance()?.remaining ?? 0);
+  // Cuánto falta pagar de MI parte puntual (no el total de la mesa) — se
+  // busca cruzando "quién soy" (participants[].isYou) contra
+  // balance().byParticipant, que viene indexado por el mismo public_id.
+  myShare(): string | null {
+    const me = this.svc.state()?.participants?.find((p) => p.isYou);
+    const row = me ? this.balance()?.byParticipant?.find((b: any) => b.participantId === me.id) : null;
+    return row && Number(row.remaining) > 0 ? row.remaining : null;
+  }
   readonly payBusy = signal(false);
   readonly payError = signal('');
   readonly expanded = new Set<string>();
