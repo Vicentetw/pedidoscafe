@@ -36,7 +36,9 @@ const STATUS_LABEL: Record<string, string> = { OPEN: 'Abierta', ORDERING: 'Pidie
         @for (s of sessions(); track s.id) {
           <li>
             <button class="srow" [class.sel]="selected()?.id === s.id" (click)="select(s)">
-              <span><strong>Mesa {{ s.table_code }}</strong> · {{ statusLabel(s.status) }} · {{ s.participant_count }} persona(s)</span>
+              <span><strong>Mesa {{ s.table_code }}</strong> · {{ statusLabel(s.status) }} · {{ s.participant_count }} persona(s)
+                @if (isStale(s)) { <span class="badge badge-warning">⏱ hace {{ openMinutes(s) }} min</span> }
+              </span>
               <span class="chev">{{ selected()?.id === s.id ? '▲' : '▼' }}</span>
             </button>
             @if (selected()?.id === s.id) {
@@ -80,6 +82,9 @@ export class StaffTables implements OnInit, OnDestroy {
 
   canForceClose() { return this.currentUser.hasPermission('tables:force_close'); }
   statusLabel(s: string) { return STATUS_LABEL[s] ?? s; }
+  private staleMinutes = 120;
+  isStale(s: OpenSession) { return this.openMinutes(s) >= this.staleMinutes; }
+  openMinutes(s: OpenSession) { return Math.floor((Date.now() - new Date(s.opened_at).getTime()) / 60000); }
 
   private poll?: ReturnType<typeof setInterval>;
 
@@ -97,6 +102,10 @@ export class StaffTables implements OnInit, OnDestroy {
     this.branchId.set(id);
     this.selected.set(null);
     this.loadSessions();
+    this.api.get<{ data: Record<string, unknown> }>(`/api/platform/settings?branchId=${id}`).subscribe({
+      next: (r) => { const v = r.data['orders.abandon_timeout_minutes']; this.staleMinutes = typeof v === 'number' ? v : 120; },
+      error: () => { this.staleMinutes = 120; }, // el mozo puede no tener settings:view — degrada a default, no rompe
+    });
   }
 
   loadSessions() {

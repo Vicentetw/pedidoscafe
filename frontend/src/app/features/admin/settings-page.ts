@@ -50,6 +50,24 @@ interface Branch { id: number; name: string; }
         }
       </div>
 
+      <div class="card toggle-card">
+        <div>
+          <h3>Aviso de mesa abierta hace mucho</h3>
+          <p class="muted small">
+            No cierra la mesa sola (nunca se descarta un saldo pendiente sin que alguien lo
+            decida) — sólo la marca con un aviso en el panel de Mesas para que el mozo/encargado
+            la revise.
+          </p>
+        </div>
+        <div class="row">
+          <label class="muted small">Avisar después de
+            <input type="number" min="1" max="240" [(ngModel)]="staleMinutes" style="width:70px" />
+            minutos
+          </label>
+          <button [disabled]="saving()" (click)="saveStale()">Guardar</button>
+        </div>
+      </div>
+
       <div class="card">
         <h3>Otros valores (avanzado)</h3>
         @if (entries().length) {
@@ -73,6 +91,7 @@ interface Branch { id: number; name: string; }
     .toggle-row h3 { margin-bottom: 2px; }
     .hint { margin: 0; }
     ul { padding-left: 18px; }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 
     .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -97,9 +116,22 @@ export class SettingsPage implements OnInit {
   readonly msg = signal('');
 
   private readonly KEY = 'orders.allow_individual_payment';
+  // Reusa una clave ya sembrada desde la Fase 1 (`orders.abandon_timeout_minutes`,
+  // reservada pero sin usar hasta ahora) en vez de sumar una nueva.
+  private readonly STALE_KEY = 'orders.abandon_timeout_minutes';
+  staleMinutes = 120;
 
   entries() {
-    return Object.entries(this.data()).filter(([k]) => k !== this.KEY);
+    return Object.entries(this.data()).filter(([k]) => k !== this.KEY && k !== this.STALE_KEY);
+  }
+  saveStale() {
+    this.error.set(''); this.msg.set('');
+    this.saving.set(true);
+    const q = this.branchId() != null ? `?branchId=${this.branchId()}` : '';
+    this.api.put(`/api/platform/settings/${this.STALE_KEY}${q}`, { value: this.staleMinutes }).subscribe({
+      next: () => { this.msg.set('Guardado.'); this.saving.set(false); this.load(); },
+      error: (e) => { this.error.set(e?.error?.error ?? 'No se pudo guardar.'); this.saving.set(false); },
+    });
   }
   stringify(v: unknown) { return JSON.stringify(v); }
 
@@ -123,6 +155,8 @@ export class SettingsPage implements OnInit {
       next: (r) => {
         this.data.set(r.data);
         this.allowIndividual.set(r.data[this.KEY] === true);
+        const stale = r.data[this.STALE_KEY];
+        this.staleMinutes = typeof stale === 'number' ? stale : 120;
         this.loading.set(false);
       },
       error: (e) => {

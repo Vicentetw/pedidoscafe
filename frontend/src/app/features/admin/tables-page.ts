@@ -86,7 +86,9 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
           @for (s of sessions(); track s.id) {
             <li>
               <button class="srow" [class.sel]="openSession() === s.id" (click)="toggleSession(s)">
-                <span><strong>Mesa {{ s.table_code }}</strong> · {{ s.status }} · {{ s.order_mode }} · {{ s.participant_count }} persona(s)</span>
+                <span><strong>Mesa {{ s.table_code }}</strong> · {{ s.status }} · {{ s.order_mode }} · {{ s.participant_count }} persona(s)
+                  @if (isStale(s)) { <span class="badge badge-warning">⏱ hace {{ openMinutes(s) }} min</span> }
+                </span>
                 <span class="chev">{{ openSession() === s.id ? '▲' : '▼' }}</span>
               </button>
               @if (openSession() === s.id) {
@@ -144,6 +146,10 @@ export class TablesPage implements OnInit, OnDestroy {
   readonly openQr = signal<number | null>(null);
   readonly qrImg = signal<string | null>(null);
   readonly openSession = signal<number | null>(null);
+  private staleMinutes = 120;
+
+  isStale(s: OpenSession) { return this.openMinutes(s) >= this.staleMinutes; }
+  openMinutes(s: OpenSession) { return Math.floor((Date.now() - new Date(s.opened_at).getTime()) / 60000); }
 
   nc = ''; nn = ''; ns: number | null = null;
 
@@ -171,6 +177,10 @@ export class TablesPage implements OnInit, OnDestroy {
     this.branchId.set(id);
     this.loadTables();
     this.loadSessions();
+    this.api.get<{ data: Record<string, unknown> }>(`/api/platform/settings?branchId=${id}`).subscribe({
+      next: (r) => { const v = r.data['orders.abandon_timeout_minutes']; this.staleMinutes = typeof v === 'number' ? v : 120; },
+      error: () => { this.staleMinutes = 120; },
+    });
   }
   loadTables() {
     this.api.get<{ data: Table[] }>(`/api/tables?branchId=${this.branchId()}`).subscribe({
