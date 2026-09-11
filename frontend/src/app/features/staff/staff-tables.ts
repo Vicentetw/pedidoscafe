@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Api } from '../../core/api';
 import { CurrentUserService } from '../../core/current-user';
@@ -68,7 +68,7 @@ const STATUS_LABEL: Record<string, string> = { OPEN: 'Abierta', ORDERING: 'Pidie
     .row { display: flex; gap: 8px; margin-top: var(--space-2); }
   `],
 })
-export class StaffTables implements OnInit {
+export class StaffTables implements OnInit, OnDestroy {
   private readonly api = inject(Api);
   private readonly currentUser = inject(CurrentUserService);
 
@@ -81,12 +81,16 @@ export class StaffTables implements OnInit {
   canForceClose() { return this.currentUser.hasPermission('tables:force_close'); }
   statusLabel(s: string) { return STATUS_LABEL[s] ?? s; }
 
+  private poll?: ReturnType<typeof setInterval>;
+
   ngOnInit() {
     this.api.get<{ data: Branch[] }>('/api/platform/branches').subscribe({
       next: (r) => { this.branches.set(r.data); if (r.data[0]) this.pickBranch(r.data[0].id); },
       error: (e) => this.fail(e, 'No se pudieron cargar las sucursales.'),
     });
+    this.poll = setInterval(() => { if (this.branchId() && this.selected() == null) this.loadSessions(); }, 8000);
   }
+  ngOnDestroy() { clearInterval(this.poll); }
   private fail(e: any, m: string) { this.error.set(e?.error?.error ?? m); }
 
   pickBranch(id: number) {

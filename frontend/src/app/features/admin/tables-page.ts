@@ -1,4 +1,4 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import * as QRCode from 'qrcode';
 import { Api } from '../../core/api';
@@ -131,7 +131,7 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
     .detail { padding: var(--space-3) 8px 4px; }
   `],
 })
-export class TablesPage implements OnInit {
+export class TablesPage implements OnInit, OnDestroy {
   private readonly api = inject(Api);
   private readonly currentUser = inject(CurrentUserService);
 
@@ -153,12 +153,18 @@ export class TablesPage implements OnInit {
   statusLabel(status: string) { return STATUS_LABEL[status] ?? status; }
   linkFor(t: Table) { return `${location.origin}/t/${t.qr_token}`; }
 
+  private poll?: ReturnType<typeof setInterval>;
+
   ngOnInit() {
     this.api.get<{ data: Branch[] }>('/api/platform/branches').subscribe({
       next: (r) => { this.branches.set(r.data); if (r.data[0]) this.pickBranch(r.data[0].id); },
       error: (e) => this.fail(e, 'No se pudieron cargar las sucursales.'),
     });
+    // Sin esto, una mesa nueva (alguien entró por QR) sólo se veía al
+    // recargar la página a mano — mismo patrón de polling que ya usa Cocina.
+    this.poll = setInterval(() => { if (this.branchId() && this.openSession() == null) { this.loadTables(); this.loadSessions(); } }, 8000);
   }
+  ngOnDestroy() { clearInterval(this.poll); }
   private fail = (e: any, m: string) => this.error.set(e?.error?.error ?? m);
 
   pickBranch(id: number) {
