@@ -148,6 +148,13 @@ export class TableSessionService {
   submitOrder(orderId: number) {
     return firstValueFrom(this.http.post<any>(`${this.base}/api/session/orders/${orderId}/submit`, {}, { headers: this.authHeaders() }));
   }
+  // "Ya terminamos de pedir" — confirma TODOS los pedidos sin confirmar de
+  // la mesa de una vez (no sólo los míos), para avisarle a cocina.
+  closeAllOrders() {
+    return firstValueFrom(this.http.post<{ submitted: number[]; skipped: { orderId: number; participant: string | null; reason: string }[] }>(
+      `${this.base}/api/session/orders/close-all`, {}, { headers: this.authHeaders() }
+    ));
+  }
 
   // -------- pagos del comensal (Fase 6) — sólo online; el efectivo lo cobra el mostrador
   balance() {

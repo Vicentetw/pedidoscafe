@@ -54,6 +54,10 @@ const STATUS_BADGE: Record<string, string> = {
           <p class="muted small">Hay otra persona armando un pedido en esta mesa.</p>
         }
         <p class="muted small total-line">Total de la mesa: <strong>{{ orders()?.currency }} {{ orders()?.tableTotal }}</strong></p>
+        @if (closeAllMsg()) { <p class="ok small">{{ closeAllMsg() }}</p> }
+        <button class="block close-all-btn" [disabled]="closingAll()" (click)="closeAll()">
+          ✅ Ya pedimos todo — avisar a cocina
+        </button>
       </div>
     }
 
@@ -119,6 +123,9 @@ const STATUS_BADGE: Record<string, string> = {
     .total-line { margin: 4px 0 0; text-align: right; }
     .paid-card { background: var(--success-soft); border-color: transparent; }
     .err { color: var(--danger); font-size: .9rem; }
+    .ok { color: var(--success); font-size: .9rem; }
+    .close-all-btn { margin-top: 4px; }
+    .confirm-msg { margin: 6px 0; }
     .small { font-size: .85rem; margin: 0; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
 
@@ -155,6 +162,8 @@ export class OrderPanel implements OnInit {
   readonly menuLoading = signal(true);
   readonly busy = signal(false);
   readonly confirmingId = signal<number | null>(null);
+  readonly closingAll = signal(false);
+  readonly closeAllMsg = signal('');
   readonly error = signal('');
   readonly balance = signal<any>(null);
   readonly hasBalance = () => this.balance() != null;
@@ -259,5 +268,29 @@ export class OrderPanel implements OnInit {
       this.error.set(e?.error?.error ?? 'No se pudo confirmar el pedido.');
       await this.refreshOrders();
     } finally { this.busy.set(false); }
+  }
+
+  // "Ya pedimos todo" — confirma de una vez los pedidos sin confirmar de
+  // TODA la mesa (no sólo los míos), para que quede claro para cocina que
+  // ya pueden empezar a servir.
+  async closeAll() {
+    const warn = this.orders()?.someoneElseOrdering?.length
+      ? 'Ojo: alguien más todavía está armando su pedido — igual se va a confirmar todo lo que haya cargado hasta ahora. '
+      : '';
+    if (!confirm(`${warn}¿Confirmamos y avisamos a cocina que ya terminamos de pedir?`)) return;
+    this.closeAllMsg.set('');
+    this.closingAll.set(true);
+    try {
+      const r = await this.svc.closeAllOrders();
+      this.closeAllMsg.set(
+        r.submitted.length ? `Listo — se avisó a cocina (${r.submitted.length} pedido(s)).` : 'Ya estaba todo confirmado.'
+      );
+      await this.refreshOrders();
+      await this.refreshBalance();
+    } catch (e: any) {
+      this.error.set(e?.error?.error ?? 'No se pudo avisar a cocina. Probá de nuevo.');
+    } finally {
+      this.closingAll.set(false);
+    }
   }
 }

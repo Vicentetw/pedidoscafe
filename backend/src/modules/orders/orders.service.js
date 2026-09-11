@@ -389,13 +389,34 @@ async function listGuestOrders(scope) {
   };
 }
 
+// "Ya terminamos de pedir": confirma de una vez todos los pedidos SIN
+// CONFIRMAR de la mesa (no sólo los del que aprieta el botón) — pedido
+// explícito de la aceptación, para que quede claro para cocina/mozo que ya
+// pueden servir en vez de esperar a que cada persona confirme por separado.
+// Un borrador vacío (alguien abrió "agregar" y no llegó a sumar nada) se
+// salta en vez de romper todo el lote.
+async function submitAllDraftsInSession(tenantId, sessionId, actor) {
+  const drafts = await repo.draftOrdersInSession(tenantId, sessionId);
+  const submitted = [];
+  const skipped = [];
+  for (const d of drafts) {
+    try {
+      await submitOrder(tenantId, d.id, actor);
+      submitted.push(d.id);
+    } catch (err) {
+      skipped.push({ orderId: d.id, participant: d.display_name, reason: err.message });
+    }
+  }
+  return { submitted, skipped };
+}
+
 async function sessionPublicId(sessionId) {
   const [[row]] = await pool.query(`SELECT public_id FROM table_sessions WHERE id = :id`, { id: sessionId });
   return row ? row.public_id : null;
 }
 
 module.exports = {
-  createOrder, getOrder, addItem, updateItem, removeItem, submitOrder,
+  createOrder, getOrder, addItem, updateItem, removeItem, submitOrder, submitAllDraftsInSession,
   cancelOrder, setPriority, verifyAge, completeOrder,
   listOrders, getOrderEvents, listGuestOrders,
   // seams para la Fase 5

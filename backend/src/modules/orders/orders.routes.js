@@ -62,6 +62,11 @@ router.delete('/:id/device', requirePermission('devices:assign'), asyncHandler(a
 router.post('/:id/submit', requirePermission('orders:create'), asyncHandler(async (req, res) =>
   res.json(await svc.submitOrder(req.tenantId, +req.params.id, staffActor(req)))));
 
+// Equivalente de staff a "ya terminamos de pedir" del comensal — por si el
+// mozo tiene que dispararlo él mismo (piden por él, o la app no anda).
+router.post('/sessions/:sessionId/submit-all', requirePermission('orders:create'), asyncHandler(async (req, res) =>
+  res.json(await svc.submitAllDraftsInSession(req.tenantId, +req.params.sessionId, staffActor(req)))));
+
 router.post('/:id/cancel', requirePermission('orders:cancel'), asyncHandler(async (req, res) => {
   const { reason } = s.cancelOrder.parse(req.body);
   const canAfter = req.appUser?.isSuperadmin || req.appUser?.permissions?.has('orders:cancel_after_prep');

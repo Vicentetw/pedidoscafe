@@ -47,6 +47,13 @@ const NOT_CANCELLABLE = new Set(['READY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
         </p>
       }
 
+      @if (canSubmitAll() && hasDrafts()) {
+        <button class="block submit-all-btn" [disabled]="submittingAll()" (click)="submitAll()">
+          {{ submittingAll() ? 'Enviando…' : '📣 Cerrar pedidos pendientes y avisar a cocina' }}
+        </button>
+        @if (submitAllMsg()) { <p class="ok small">{{ submitAllMsg() }}</p> }
+      }
+
       @for (g of groups(); track g.participantId) {
         <div class="pgroup">
           <h4>{{ g.name }}</h4>
@@ -85,7 +92,9 @@ const NOT_CANCELLABLE = new Set(['READY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
     ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: .85rem; display: flex; flex-direction: column; gap: 3px; }
     ul li { display: flex; justify-content: space-between; gap: 8px; }
     .err { color: var(--danger); }
+    .ok { color: var(--success); }
     .small { font-size: .85rem; }
+    .submit-all-btn { margin-bottom: var(--space-3); }
   `],
 })
 export class SessionOrderDetail implements OnChanges {
@@ -101,8 +110,12 @@ export class SessionOrderDetail implements OnChanges {
   readonly orders = signal<Order[]>([]);
   readonly balance = signal<Balance | null>(null);
   readonly cancelling = signal<number | null>(null);
+  readonly submittingAll = signal(false);
+  readonly submitAllMsg = signal('');
 
   canCancel() { return this.currentUser.hasPermission('orders:cancel'); }
+  canSubmitAll() { return this.currentUser.hasPermission('orders:create'); }
+  hasDrafts() { return this.orders().some((o) => o.status === 'DRAFT'); }
   badgeClass(s: string) { return STATUS_BADGE[s] ?? 'badge'; }
   statusLabel(s: string) { return STATUS_LABEL[s] ?? s; }
   notCancellable(s: string) { return NOT_CANCELLABLE.has(s); }
@@ -127,6 +140,23 @@ export class SessionOrderDetail implements OnChanges {
         error: () => this.balance.set(null),
       });
     }
+  }
+
+  // Confirmación pedida explícitamente: cerrar los pedidos de una mesa
+  // entera no es una acción trivial para deshacer (ya salió hacia cocina).
+  submitAll() {
+    if (!confirm('¿Confirmar y enviar a cocina TODOS los pedidos sin confirmar de esta mesa?')) return;
+    this.submitAllMsg.set('');
+    this.submittingAll.set(true);
+    this.api.post<{ submitted: number[]; skipped: any[] }>(`/api/orders/sessions/${this.sessionId}/submit-all`, {}).subscribe({
+      next: (r) => {
+        this.submittingAll.set(false);
+        this.submitAllMsg.set(r.submitted.length ? `Listo — ${r.submitted.length} pedido(s) enviados a cocina.` : 'No había nada pendiente.');
+        this.load();
+        this.changed.emit();
+      },
+      error: (e) => { this.submittingAll.set(false); this.error.set(e?.error?.error ?? 'No se pudo enviar.'); },
+    });
   }
 
   private participantName(pid: number | null): string {

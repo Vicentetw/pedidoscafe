@@ -61,6 +61,13 @@ router.post('/orders/:id/submit', asyncHandler(async (req, res) => {
   res.json(await svc.submitOrder(req.tableSession.tenantId, +req.params.id, guestActor(req)));
 }));
 
+// "Ya terminamos de pedir" — confirma TODOS los pedidos sin confirmar de
+// la mesa (no sólo los míos), para avisarle a cocina de una vez.
+router.post('/orders/close-all', asyncHandler(async (req, res) => {
+  const ts = req.tableSession;
+  res.json(await svc.submitAllDraftsInSession(ts.tenantId, ts.sessionId, guestActor(req)));
+}));
+
 router.post('/orders/:id/cancel', asyncHandler(async (req, res) => {
   await myOrder(req);
   const { reason } = s.cancelOrder.parse(req.body);

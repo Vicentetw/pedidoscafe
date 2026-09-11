@@ -279,3 +279,30 @@ test('GET /api/session/payments/balance devuelve el saldo de la mesa', async () 
   assert.equal(b.total, '0.00');
   assert.equal(b.remaining, '0.00');
 });
+
+test('"Ya pedimos todo" confirma de una vez los borradores de TODA la mesa, no sólo de quien lo aprieta', async () => {
+  const table = await freshTable('CLOSEALL');
+  const ana = await tablesSvc.startSession(table.qr, { displayName: 'Ana' }, {});
+  const [[anaRow]] = await db.query('SELECT id FROM session_participants WHERE public_id = ?', [ana.participant.id]);
+  const [[sess]] = await db.query('SELECT id FROM table_sessions WHERE public_id = ?', [ana.session.id]);
+
+  const beto = await tablesSvc.startSession(table.qr, { displayName: 'Beto' }, {});
+  const [[betoRow]] = await db.query('SELECT id FROM session_participants WHERE public_id = ?', [beto.participant.id]);
+
+  const oAna = await orderSvc.createOrder(T, { branchId: ctx.branchId, sessionId: sess.id, participantId: anaRow.id, channel: 'TABLE' }, { kind: 'guest' });
+  await orderSvc.addItem(T, oAna.id, { productCode: 'cafe', qty: 1 }, { kind: 'guest' });
+  const oBeto = await orderSvc.createOrder(T, { branchId: ctx.branchId, sessionId: sess.id, participantId: betoRow.id, channel: 'TABLE' }, { kind: 'guest' });
+  await orderSvc.addItem(T, oBeto.id, { productCode: 'cafe', qty: 2 }, { kind: 'guest' });
+  const oVacio = await orderSvc.createOrder(T, { branchId: ctx.branchId, sessionId: sess.id, participantId: anaRow.id, channel: 'TABLE' }, { kind: 'guest' }); // sin ítems
+
+  // Ana la dispara, pero el pedido de Beto (otro participante) también se confirma.
+  const r = await orderSvc.submitAllDraftsInSession(T, sess.id, { kind: 'guest', actorId: null });
+  assert.deepEqual(r.submitted.sort(), [oAna.id, oBeto.id].sort());
+  assert.equal(r.skipped.length, 1, 'el borrador vacío se salta, no rompe el lote');
+  assert.equal(r.skipped[0].orderId, oVacio.id);
+
+  const [[a1]] = await db.query('SELECT status FROM orders WHERE id = ?', [oAna.id]);
+  const [[b1]] = await db.query('SELECT status FROM orders WHERE id = ?', [oBeto.id]);
+  assert.notEqual(a1.status, 'DRAFT');
+  assert.notEqual(b1.status, 'DRAFT');
+});
