@@ -79,33 +79,74 @@ const STATUS_BADGE: Record<string, string> = {
     }
 
     <div class="card menu-card">
-      <h3>Menú</h3>
+      <div class="menu-head">
+        <h3>Menú</h3>
+        <div class="view-toggle">
+          <button [class.active]="viewMode() === 'grid'" (click)="viewMode.set('grid')" aria-label="Ver en cuadrícula" title="Cuadrícula">▦</button>
+          <button [class.active]="viewMode() === 'list'" (click)="viewMode.set('list')" aria-label="Ver en lista" title="Lista">☰</button>
+        </div>
+      </div>
       @if (menuLoading()) { <p class="muted">Cargando…</p> }
-      @for (cat of cats(); track cat.code) {
-        <h4>{{ cat.icon || '' }} {{ cat.name }}</h4>
-        @for (p of cat.products; track p.code) {
-          <div class="mi" [class.off]="!p.available">
-            <div class="mi-info">
-              <span class="name">{{ p.name }}</span>
-              <span class="price muted">{{ p.currency }} {{ p.price }}</span>
-            </div>
-            @if (p.available) {
-              @if (p.variants.length) {
-                @if (expanded.has(p.code)) {
-                  <div class="chips">
-                    @for (vr of p.variants; track vr.code) {
-                      <button class="chip" (click)="add(p.code, vr.code)">{{ vr.name }} · {{ p.currency }} {{ vr.price }}</button>
+      @if (cats().length) {
+        <div class="cat-scroller">
+          <button class="cat-chip" [class.active]="activeCat() === null" (click)="activeCat.set(null)">Todos</button>
+          @for (cat of cats(); track cat.code) {
+            <button class="cat-chip" [class.active]="activeCat() === cat.code" (click)="activeCat.set(cat.code)">
+              @if (cat.icon) { <span class="chip-icon">{{ cat.icon }}</span> }{{ cat.name }}
+            </button>
+          }
+        </div>
+      }
+      @for (cat of visibleCats(); track cat.code) {
+        @if (!activeCat()) { <h4>{{ cat.icon || '' }} {{ cat.name }}</h4> }
+        <div [class]="viewMode() === 'grid' ? 'pgrid' : 'plist'">
+          @for (p of cat.products; track p.code) {
+            @if (viewMode() === 'grid') {
+              <div class="pcard" [class.off]="!p.available">
+                <div class="pcard-icon">{{ cat.icon || '🍽️' }}</div>
+                <div class="pcard-name">{{ p.name }}</div>
+                <div class="pcard-price">{{ p.currency }} {{ p.price }}</div>
+                @if (p.available) {
+                  @if (p.variants.length) {
+                    @if (expanded.has(p.code)) {
+                      <div class="chips card-chips">
+                        @for (vr of p.variants; track vr.code) {
+                          <button class="chip" (click)="add(p.code, vr.code)">{{ vr.name }} · {{ p.currency }} {{ vr.price }}</button>
+                        }
+                      </div>
+                    } @else {
+                      <button class="pick-btn card-pick" (click)="toggle(p.code)">Elegir</button>
                     }
-                  </div>
-                } @else {
-                  <button class="pick-btn" (click)="toggle(p.code)">Elegir</button>
-                }
-              } @else {
-                <button class="add-btn" (click)="add(p.code, null)" [attr.aria-label]="'Agregar ' + p.name">+</button>
-              }
-            } @else { <span class="badge">Sin stock</span> }
-          </div>
-        }
+                  } @else {
+                    <button class="add-btn card-add" (click)="add(p.code, null)" [attr.aria-label]="'Agregar ' + p.name">+</button>
+                  }
+                } @else { <span class="badge off-badge">Sin stock</span> }
+              </div>
+            } @else {
+              <div class="mi" [class.off]="!p.available">
+                <div class="mi-info">
+                  <span class="name">{{ p.name }}</span>
+                  <span class="price muted">{{ p.currency }} {{ p.price }}</span>
+                </div>
+                @if (p.available) {
+                  @if (p.variants.length) {
+                    @if (expanded.has(p.code)) {
+                      <div class="chips">
+                        @for (vr of p.variants; track vr.code) {
+                          <button class="chip" (click)="add(p.code, vr.code)">{{ vr.name }} · {{ p.currency }} {{ vr.price }}</button>
+                        }
+                      </div>
+                    } @else {
+                      <button class="pick-btn" (click)="toggle(p.code)">Elegir</button>
+                    }
+                  } @else {
+                    <button class="add-btn" (click)="add(p.code, null)" [attr.aria-label]="'Agregar ' + p.name">+</button>
+                  }
+                } @else { <span class="badge">Sin stock</span> }
+              </div>
+            }
+          }
+        </div>
       }
     </div>
     @if (error()) { <p class="err">{{ error() }}</p> }
@@ -129,6 +170,27 @@ const STATUS_BADGE: Record<string, string> = {
     .small { font-size: .85rem; margin: 0; }
     .row { display: flex; gap: 8px; flex-wrap: wrap; }
 
+    .menu-head { display: flex; justify-content: space-between; align-items: center; }
+    .menu-head h3 { margin: 0; }
+    .view-toggle { display: flex; gap: 4px; }
+    .view-toggle button {
+      width: 34px; height: 34px; padding: 0; border-radius: var(--radius-sm);
+      background: var(--surface-2); border-color: transparent; font-size: 1rem; color: var(--muted);
+    }
+    .view-toggle button.active { background: var(--primary-soft); color: var(--primary-hover); }
+
+    .cat-scroller {
+      display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; margin-bottom: var(--space-2);
+      scrollbar-width: none;
+    }
+    .cat-scroller::-webkit-scrollbar { display: none; }
+    .cat-chip {
+      flex-shrink: 0; white-space: nowrap; padding: 0.45rem 0.9rem; border-radius: var(--radius-pill);
+      background: var(--surface-2); border-color: transparent; font-size: .85rem;
+    }
+    .cat-chip.active { background: var(--primary); color: var(--primary-contrast); }
+    .chip-icon { margin-right: 4px; }
+
     .menu-card h4:first-of-type { margin-top: 0; }
     .mi { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--border); }
     .mi:last-child { border-bottom: none; }
@@ -137,14 +199,33 @@ const STATUS_BADGE: Record<string, string> = {
     .mi .name { font-weight: 600; }
     .price { font-size: .85rem; }
 
-    .add-btn {
+    /* vista en cuadrícula — misma acción (agregar/elegir variante), sólo
+       cambia la presentación; responsive solo (auto-fill, sin media queries) */
+    .pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-bottom: var(--space-3); }
+    .pcard {
+      position: relative; display: flex; flex-direction: column; gap: 4px; min-height: 128px;
+      padding: 10px; padding-bottom: 44px; border-radius: var(--radius-sm);
+      background: var(--surface-2); border: 1px solid var(--border);
+    }
+    .pcard.off { opacity: .5; }
+    .pcard-icon {
+      width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center;
+      font-size: 1.3rem; background: var(--primary-soft); margin-bottom: 2px;
+    }
+    .pcard-name { font-weight: 600; font-size: .88rem; line-height: 1.25; }
+    .pcard-price { font-size: .82rem; color: var(--muted); }
+    .off-badge { align-self: flex-start; }
+
+    .add-btn, .card-add {
       flex-shrink: 0; width: 38px; height: 38px; min-height: 38px; padding: 0;
       border-radius: 50%; font-size: 1.3rem; line-height: 1; font-weight: 400;
       background: var(--primary-soft); color: var(--primary-hover); border: none;
     }
-    .add-btn:hover { background: var(--primary); color: var(--primary-contrast); }
-    .pick-btn { flex-shrink: 0; font-size: .85rem; padding: 0.45rem 0.8rem; }
+    .add-btn:hover, .card-add:hover { background: var(--primary); color: var(--primary-contrast); }
+    .card-add, .card-pick { position: absolute; right: 10px; bottom: 10px; }
+    .pick-btn, .card-pick { flex-shrink: 0; font-size: .85rem; padding: 0.45rem 0.8rem; }
     .chips { display: flex; flex-wrap: wrap; gap: 6px; max-width: 60%; justify-content: flex-end; }
+    .card-chips { position: absolute; left: 10px; right: 10px; bottom: 10px; max-width: none; }
     .chip {
       font-size: .8rem; padding: 0.4rem 0.7rem; border-radius: var(--radius-pill);
       background: var(--primary-soft); border-color: transparent; color: var(--primary-hover);
@@ -185,6 +266,15 @@ export class OrderPanel implements OnInit {
   readonly payError = signal('');
   readonly expanded = new Set<string>();
   private draftId: number | null = null;
+
+  // Cuadrícula (tarjetas) o lista, y filtro por categoría (chips con
+  // scroll horizontal) — pedido explícito de diseño: null = "Todos".
+  readonly viewMode = signal<'grid' | 'list'>('grid');
+  readonly activeCat = signal<string | null>(null);
+  visibleCats() {
+    const c = this.activeCat();
+    return c ? this.cats().filter((x) => x.code === c) : this.cats();
+  }
 
   badgeClass(status: string) { return STATUS_BADGE[status] ?? 'badge'; }
   toggle(code: string) { this.expanded.has(code) ? this.expanded.delete(code) : this.expanded.add(code); }
