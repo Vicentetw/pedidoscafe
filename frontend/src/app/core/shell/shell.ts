@@ -192,6 +192,9 @@ export class Shell {
     { label: 'Mesas', link: '/staff/mesas', permission: 'tables:view' },
     { label: 'Mostrador', link: '/staff/mostrador', permission: 'orders:create' },
     { label: 'Cocina', link: '/staff/cocina', permission: 'kitchen:view' },
+    // Sólo aparece si la empresa habilitó "el mozo puede cobrar"
+    // (Configuración) — sin eso, el mozo no tiene payments:view.
+    { label: 'Caja', link: '/staff/caja', permission: 'payments:view' },
   ];
   private readonly adminNav: NavItem[] = [
     { label: 'Inicio', link: '/admin/inicio' },

@@ -1,4 +1,5 @@
 const pool = require('../db');
+const settingsRepo = require('../modules/platform/settings.repository');
 
 // Portado de motor-laboral/repositories/appUserRepository.js del sistema de
 // asistencia. Permisos efectivos = permisos de los roles asignados
@@ -17,9 +18,10 @@ async function findByFirebaseUid(firebaseUid, conn = pool) {
   if (!user) return null;
 
   const [roleRows] = await conn.query(
-    `SELECT rp.permission
+    `SELECT rp.permission, r.code AS role_code
        FROM user_roles ur
        JOIN role_permissions rp ON rp.role_id = ur.role_id
+       JOIN roles r ON r.id = ur.role_id
       WHERE ur.app_user_id = :id`,
     { id: user.id }
   );
@@ -32,6 +34,17 @@ async function findByFirebaseUid(firebaseUid, conn = pool) {
   for (const o of overrideRows) {
     if (o.effect === 'ALLOW') permissions.add(o.permission);
     else if (o.effect === 'DENY') permissions.delete(o.permission);
+  }
+
+  // "Cada empresa configura si el mozo puede cobrar" (pedido en la
+  // aceptación): el rol de sistema "mozo" no trae payments:*, pero el
+  // dueño puede habilitarlo por empresa/sucursal — mismo mecanismo que
+  // orders.allow_individual_payment (tabla `settings` genérica), oculto/
+  // en false por defecto. No se edita el rol de sistema (eso rompería
+  // otras empresas) — se agrega acá, a nivel de resolución del usuario.
+  if (user.tenant_id && roleRows.some((r) => r.role_code === 'mozo')) {
+    const canCharge = await settingsRepo.get(user.tenant_id, 'staff.mozo_can_charge', user.default_branch_id ?? null);
+    if (canCharge === true) { permissions.add('payments:view'); permissions.add('payments:charge'); }
   }
 
   return {

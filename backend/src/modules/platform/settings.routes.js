@@ -25,6 +25,12 @@ const KEYS = {
   // decidir si mostrar la opción al comensal Y para rechazarla server-side
   // si alguien la manda igual sin tenerla habilitada.
   'orders.allow_individual_payment': z.boolean(),
+  // "Cada empresa configura si el mozo puede cobrar" (pedido en la
+  // aceptación) — oculto/en false por defecto. Lo lee
+  // appUserRepository.findByFirebaseUid para sumarle payments:view/
+  // payments:charge a cualquier usuario con el rol "mozo", sin tocar el
+  // rol de sistema (que es compartido por todas las empresas).
+  'staff.mozo_can_charge': z.boolean(),
 };
 
 const router = express.Router();

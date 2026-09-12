@@ -51,6 +51,28 @@ interface Branch { id: number; name: string; }
       </div>
 
       <div class="card toggle-card">
+        <div class="toggle-row">
+          <div>
+            <h3>El mozo puede cobrar</h3>
+            <p class="muted small">
+              Oculto por defecto: el mozo sólo puede ver y armar pedidos, no cobrar. Si lo
+              activás, le aparece "Caja" en su menú y puede cobrar en efectivo directo desde
+              la mesa (con el mismo aviso de vuelto que usa Caja).
+            </p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="mozoCanCharge()" (ngModelChange)="toggleMozoCharge($event)" [disabled]="saving()" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        @if (branchId() === null) {
+          <p class="muted small hint">Esto se está guardando a nivel EMPRESA — aplica a todas las sucursales que no tengan su propio valor.</p>
+        } @else {
+          <p class="muted small hint">Esto se está guardando sólo para esta sucursal.</p>
+        }
+      </div>
+
+      <div class="card toggle-card">
         <div>
           <h3>Aviso de mesa abierta hace mucho</h3>
           <p class="muted small">
@@ -110,6 +132,7 @@ export class SettingsPage implements OnInit {
   readonly branchId = signal<number | null>(null);
   readonly data = signal<Record<string, unknown>>({});
   readonly allowIndividual = signal(false);
+  readonly mozoCanCharge = signal(false);
   readonly loading = signal(true);
   readonly saving = signal(false);
   readonly error = signal('');
@@ -120,9 +143,19 @@ export class SettingsPage implements OnInit {
   // reservada pero sin usar hasta ahora) en vez de sumar una nueva.
   private readonly STALE_KEY = 'orders.abandon_timeout_minutes';
   staleMinutes = 120;
+  private readonly MOZO_KEY = 'staff.mozo_can_charge';
 
   entries() {
-    return Object.entries(this.data()).filter(([k]) => k !== this.KEY && k !== this.STALE_KEY);
+    return Object.entries(this.data()).filter(([k]) => k !== this.KEY && k !== this.STALE_KEY && k !== this.MOZO_KEY);
+  }
+  toggleMozoCharge(value: boolean) {
+    this.error.set(''); this.msg.set('');
+    this.saving.set(true);
+    const q = this.branchId() != null ? `?branchId=${this.branchId()}` : '';
+    this.api.put(`/api/platform/settings/${this.MOZO_KEY}${q}`, { value }).subscribe({
+      next: () => { this.mozoCanCharge.set(value); this.msg.set('Guardado.'); this.saving.set(false); this.load(); },
+      error: (e) => { this.error.set(e?.error?.error ?? 'No se pudo guardar.'); this.saving.set(false); },
+    });
   }
   saveStale() {
     this.error.set(''); this.msg.set('');
@@ -155,6 +188,7 @@ export class SettingsPage implements OnInit {
       next: (r) => {
         this.data.set(r.data);
         this.allowIndividual.set(r.data[this.KEY] === true);
+        this.mozoCanCharge.set(r.data[this.MOZO_KEY] === true);
         const stale = r.data[this.STALE_KEY];
         this.staleMinutes = typeof stale === 'number' ? stale : 120;
         this.loading.set(false);

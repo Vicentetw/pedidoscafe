@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
 import { CurrentUserService } from '../../core/current-user';
 import { SessionOrderDetail } from '../shared/session-order-detail';
@@ -18,7 +19,7 @@ const STATUS_LABEL: Record<string, string> = { OPEN: 'Abierta', ORDERING: 'Pidie
 // cada mesa (bug real encontrado en la aceptación).
 @Component({
   selector: 'app-staff-tables',
-  imports: [FormsModule, SessionOrderDetail],
+  imports: [FormsModule, RouterLink, SessionOrderDetail],
   template: `
     <h1>Mesas</h1>
     @if (error()) { <p class="err">{{ error() }}</p> }
@@ -45,6 +46,9 @@ const STATUS_LABEL: Record<string, string> = { OPEN: 'Abierta', ORDERING: 'Pidie
               <div class="detail">
                 <app-session-order-detail [sessionId]="s.id" (changed)="loadSessions()" />
                 <div class="row">
+                  @if (canCharge()) {
+                    <a class="cash-link" [routerLink]="['/staff/caja']" [queryParams]="{ branchId: branchId(), sessionId: s.id }">💳 Cobrar en Caja</a>
+                  }
                   <button (click)="close(s)">Cerrar mesa</button>
                   @if (canForceClose()) { <button class="danger" (click)="forceClose(s)">Cierre forzado</button> }
                 </div>
@@ -68,6 +72,12 @@ const STATUS_LABEL: Record<string, string> = { OPEN: 'Abierta', ORDERING: 'Pidie
     .chev { color: var(--muted); font-size: .75rem; }
     .detail { padding: var(--space-3) 8px 4px; }
     .row { display: flex; gap: 8px; margin-top: var(--space-2); }
+    .cash-link {
+      display: inline-flex; align-items: center; gap: 4px; text-decoration: none;
+      background: var(--primary); color: var(--primary-contrast); font-weight: 600;
+      border-radius: var(--radius-sm); padding: 0.6rem 1.1rem; box-shadow: var(--shadow-1);
+    }
+    .cash-link:hover { background: var(--primary-hover); }
   `],
 })
 export class StaffTables implements OnInit, OnDestroy {
@@ -81,6 +91,7 @@ export class StaffTables implements OnInit, OnDestroy {
   readonly error = signal('');
 
   canForceClose() { return this.currentUser.hasPermission('tables:force_close'); }
+  canCharge() { return this.currentUser.hasPermission('payments:charge'); }
   statusLabel(s: string) { return STATUS_LABEL[s] ?? s; }
   private staleMinutes = 120;
   isStale(s: OpenSession) { return this.openMinutes(s) >= this.staleMinutes; }

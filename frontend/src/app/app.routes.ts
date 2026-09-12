@@ -58,6 +58,16 @@ export const routes: Routes = [
         data: { permission: 'kitchen:view' },
         loadComponent: () => import('./features/staff/staff-kds').then((m) => m.StaffKds),
       },
+      {
+        // Oculto para el mozo salvo que la empresa habilite
+        // "staff.mozo_can_charge" (Configuración) — ahí el backend le suma
+        // payments:view/payments:charge y este link aparece solo. Misma
+        // pantalla que /admin/caja, sin duplicar el código.
+        path: 'caja',
+        canActivate: [permissionGuard],
+        data: { permission: 'payments:view' },
+        loadComponent: () => import('./features/admin/payments-page').then((m) => m.PaymentsPage),
+      },
     ],
   },
 
