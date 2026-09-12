@@ -97,6 +97,16 @@ test('DELETE /api/session/participants/:publicId saca a alguien de la lista (baj
   assert.ok(row.left_at, 'la fila sigue existiendo, sólo con left_at seteado (baja lógica, no borrado)');
 });
 
+test('Juan no puede sacarse a sí mismo de la mesa', async () => {
+  const me = await (await fetch(`${srv.baseUrl}/api/session`, { headers: auth(ctx.tokenJuan) })).json();
+  const myId = me.participants.find((p) => p.isYou).id;
+  const res = await fetch(`${srv.baseUrl}/api/session/participants/${myId}`, { method: 'DELETE', headers: auth(ctx.tokenJuan) });
+  assert.equal(res.status, 409);
+  // sigue en la lista, sin left_at
+  const after = await (await fetch(`${srv.baseUrl}/api/session`, { headers: auth(ctx.tokenJuan) })).json();
+  assert.ok(after.participants.some((p) => p.isYou), 'Juan sigue en la lista, no se sacó a sí mismo');
+});
+
 test('sacar dos veces al mismo participante es idempotente (la segunda no "encuentra" a nadie para sacar)', async () => {
   const created = await (await fetch(`${srv.baseUrl}/api/session/participants`, {
     method: 'POST', headers: auth(ctx.tokenJuan), body: JSON.stringify({ displayName: 'Doble' }),

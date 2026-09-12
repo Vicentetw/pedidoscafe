@@ -65,7 +65,9 @@ import { OrderPanel } from './order-panel';
               <li>
                 <span class="avatar">{{ initial(p.name) }}</span>
                 <span class="pname">{{ p.name }} @if (p.isYou) { <span class="badge badge-primary">vos</span> }</span>
-                <button class="link small-link" [disabled]="removing() === p.id" (click)="removePerson(p)">quitar</button>
+                @if (!p.isYou) {
+                  <button class="link small-link" [disabled]="removing() === p.id" (click)="removePerson(p)">quitar</button>
+                }
               </li>
             }
           </ul>

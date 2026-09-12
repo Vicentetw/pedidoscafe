@@ -315,6 +315,15 @@ async function removeGuestParticipant(scope, participantPublicId) {
   if (!s) throw new NotFoundError('Tu sesión de mesa ya no existe.');
   const p = await repo.findParticipantByPublicId(scope.tenantId, scope.sessionId, participantPublicId);
   if (!p) throw new NotFoundError('Ese participante no existe.');
+  // Nadie se saca a sí mismo: tu propio table_session_token sigue firmado y
+  // válido igual (no se revoca al "quitarte"), así que quedarías actuando
+  // como un "fantasma" — tu nombre desaparece de la lista y tu pedido pasa
+  // a verse como "Invitado" para el mozo/admin, aunque vos sigas pudiendo
+  // pedir desde tu celular sin problema. Si te querés ir de la mesa,
+  // simplemente cerrá la página — tu token vence solo.
+  if (p.id === scope.participantId) {
+    throw new ConflictError('No podés quitarte a vos mismo de la mesa. "Quitar" es para sacar a otra persona.');
+  }
   const removed = await repo.removeParticipant(scope.tenantId, scope.sessionId, p.id);
   if (removed) {
     await repo.touchSession(scope.tenantId, scope.sessionId);
