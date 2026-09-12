@@ -335,9 +335,17 @@ export class PaymentsPage implements OnInit {
     this.run(this.api.post(`/api/payments/sessions/${this.selected()!.id}/split-equal`, { parts: this.parts }));
   }
   refund(p: Payment) {
+    // Devolución parcial — pedido explícito de la aceptación (ej. un
+    // pedido sin stock: se devuelve sólo la diferencia, no todo el pago).
+    // Vacío o igual al monto pagado = devolución total, como antes.
+    const amountStr = prompt(`¿Cuánto devolver? (dejalo vacío para el total: ${p.amount})`, p.amount);
+    if (amountStr == null) return;
     const reason = prompt('Motivo de la devolución:');
     if (reason == null) return;
-    this.run(this.api.post(`/api/payments/${p.id}/refund`, { reason }));
+    const body: any = { reason };
+    const trimmed = amountStr.trim();
+    if (trimmed && trimmed !== p.amount) body.amount = trimmed;
+    this.run(this.api.post(`/api/payments/${p.id}/refund`, body));
   }
   checkMpStatus(p: Payment) {
     this.error.set('');

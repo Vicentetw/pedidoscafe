@@ -1,9 +1,11 @@
 import { Component, EventEmitter, Input, OnChanges, Output, inject, signal } from '@angular/core';
+import { FormsModule } from '@angular/forms';
 import { Api } from '../../core/api';
 import { CurrentUserService } from '../../core/current-user';
 
 interface Participant { id: number; public_id: string; display_name: string; nickname: string | null; left_at: string | null; }
 interface OrderItem { id: number; qty: number; name_snapshot: string; variant_snapshot: string | null; line_total: string; }
+interface Product { code: string; name: string; base_price: string; currency: string; is_active: boolean; }
 interface Order {
   id: number; public_id: string; participant_id: number | null; status: string;
   currency: string; total: string; items: OrderItem[];
@@ -24,6 +26,9 @@ const STATUS_LABEL: Record<string, string> = {
   CANCEL_REQUESTED: 'Cancelando…', CANCELLED: 'Cancelado', REJECTED_STOCK: 'Sin stock',
 };
 const NOT_CANCELLABLE = new Set(['READY', 'DELIVERED', 'COMPLETED', 'CANCELLED', 'CANCEL_REQUESTED']);
+// Ventana en la que un pedido ya confirmado todavía se puede tocar (ver
+// STAFF_AMENDABLE_STATUSES en orders.service.js — misma frontera).
+const AMENDABLE = new Set(['CONFIRMED', 'QUEUED']);
 
 // Detalle de una mesa/sesión para STAFF: qué pidió cada uno (con nombre
 // real, no sólo el total de la mesa) y una forma de arreglar un error de
@@ -35,6 +40,7 @@ const NOT_CANCELLABLE = new Set(['READY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
 // aceptación: "no he podido ver el pedido" desde administración).
 @Component({
   selector: 'app-session-order-detail',
+  imports: [FormsModule],
   template: `
     @if (loading()) { <p class="muted small">Cargando…</p> }
     @if (error()) { <p class="err">{{ error() }}</p> }
@@ -71,10 +77,31 @@ const NOT_CANCELLABLE = new Set(['READY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
               <ul>
                 @for (it of o.items; track it.id) {
                   <li>{{ it.qty }}× {{ it.name_snapshot }}{{ it.variant_snapshot ? ' (' + it.variant_snapshot + ')' : '' }}
-                    <span class="muted">{{ o.currency }} {{ it.line_total }}</span>
+                    <span class="line-right muted">
+                      {{ o.currency }} {{ it.line_total }}
+                      @if (canAmend() && isAmendable(o.status)) {
+                        <button class="link x" [disabled]="amending() === o.id" (click)="removeItem(o, it)">quitar</button>
+                      }
+                    </span>
                   </li>
                 } @empty { <li class="muted">Sin ítems.</li> }
               </ul>
+              @if (canAmend() && isAmendable(o.status)) {
+                <div class="amend-row">
+                  @if (addingTo() === o.id) {
+                    <select [(ngModel)]="pickCode">
+                      <option value="">Elegí un producto…</option>
+                      @for (p of products(); track p.code) { <option [value]="p.code">{{ p.name }} — {{ p.currency }} {{ p.base_price }}</option> }
+                    </select>
+                    <input type="number" min="1" [(ngModel)]="pickQty" style="width:56px" />
+                    <button class="primary" [disabled]="!pickCode || amending() === o.id" (click)="addItem(o)">Agregar</button>
+                    <button (click)="addingTo.set(null)">Cancelar</button>
+                  } @else {
+                    <button class="link" (click)="openAdd(o)">+ agregar ítem</button>
+                  }
+                </div>
+              }
+              @if (amendMsg() && amendMsgFor() === o.id) { <p class="ok small">{{ amendMsg() }}</p> }
             </div>
           }
         </div>
@@ -91,6 +118,10 @@ const NOT_CANCELLABLE = new Set(['READY', 'DELIVERED', 'COMPLETED', 'CANCELLED',
     .danger-link { margin-left: auto; color: var(--danger); font-size: .82rem; }
     ul { margin: 6px 0 0; padding: 0; list-style: none; font-size: .85rem; display: flex; flex-direction: column; gap: 3px; }
     ul li { display: flex; justify-content: space-between; gap: 8px; }
+    .line-right { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+    .x { font-size: .78rem; color: var(--danger); }
+    .amend-row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; margin-top: 6px; }
+    .amend-row select { max-width: 220px; }
     .err { color: var(--danger); }
     .ok { color: var(--success); }
     .small { font-size: .85rem; }
@@ -113,8 +144,23 @@ export class SessionOrderDetail implements OnChanges {
   readonly submittingAll = signal(false);
   readonly submitAllMsg = signal('');
 
+  // "Quién puede modificar la orden [ya confirmada] y cargar la
+  // modificación para que paguen la diferencia" (pedido en la
+  // aceptación). El total de la mesa se recalcula solo al agregar/sacar
+  // — el saldo nuevo ya lo cobra/devuelve el circuito de pagos existente
+  // (Caja), no hace falta nada especial acá para la plata en sí.
+  readonly products = signal<Product[]>([]);
+  readonly addingTo = signal<number | null>(null);
+  readonly amending = signal<number | null>(null);
+  readonly amendMsg = signal('');
+  readonly amendMsgFor = signal<number | null>(null);
+  pickCode = '';
+  pickQty = 1;
+
   canCancel() { return this.currentUser.hasPermission('orders:cancel'); }
   canSubmitAll() { return this.currentUser.hasPermission('orders:create'); }
+  canAmend() { return this.currentUser.hasPermission('orders:amend_paid'); }
+  isAmendable(status: string) { return AMENDABLE.has(status); }
   hasDrafts() { return this.orders().some((o) => o.status === 'DRAFT'); }
   badgeClass(s: string) { return STATUS_BADGE[s] ?? 'badge'; }
   statusLabel(s: string) { return STATUS_LABEL[s] ?? s; }
@@ -173,6 +219,51 @@ export class SessionOrderDetail implements OnChanges {
       byId.get(key)!.orders.push(o);
     }
     return [...byId.values()];
+  }
+
+  openAdd(o: Order) {
+    this.pickCode = '';
+    this.pickQty = 1;
+    this.addingTo.set(o.id);
+    if (!this.products().length) {
+      this.api.get<{ data: Product[] }>('/api/catalog/products').subscribe({
+        next: (r) => this.products.set(r.data.filter((p) => p.is_active)),
+        error: () => this.products.set([]),
+      });
+    }
+  }
+
+  addItem(o: Order) {
+    if (!this.pickCode) return;
+    this.error.set('');
+    this.amending.set(o.id);
+    this.api.post(`/api/orders/${o.id}/items`, { productCode: this.pickCode, qty: this.pickQty || 1 }).subscribe({
+      next: () => {
+        this.amending.set(null);
+        this.addingTo.set(null);
+        this.amendMsg.set('Agregado — el saldo de la mesa ya lo refleja.');
+        this.amendMsgFor.set(o.id);
+        this.load();
+        this.changed.emit();
+      },
+      error: (e) => { this.amending.set(null); this.error.set(e?.error?.error ?? 'No se pudo agregar el ítem.'); },
+    });
+  }
+
+  removeItem(o: Order, it: OrderItem) {
+    if (!confirm(`¿Sacar "${it.name_snapshot}" de este pedido?`)) return;
+    this.error.set('');
+    this.amending.set(o.id);
+    this.api.delete(`/api/orders/${o.id}/items/${it.id}`).subscribe({
+      next: () => {
+        this.amending.set(null);
+        this.amendMsg.set('Sacado — el saldo de la mesa ya lo refleja.');
+        this.amendMsgFor.set(o.id);
+        this.load();
+        this.changed.emit();
+      },
+      error: (e) => { this.amending.set(null); this.error.set(e?.error?.error ?? 'No se pudo sacar el ítem.'); },
+    });
   }
 
   cancel(o: Order) {

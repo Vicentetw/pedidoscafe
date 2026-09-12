@@ -11,7 +11,14 @@ const devicesSchema = require('../devices/devices.schema');
 const router = express.Router();
 router.use(requireTenantId);
 
-const staffActor = (req, extra = {}) => ({ kind: 'staff', actorId: req.appUser?.id ?? null, req, ...extra });
+const staffActor = (req, extra = {}) => ({
+  kind: 'staff', actorId: req.appUser?.id ?? null, req,
+  // Modificar un pedido YA confirmado (agregar/sacar ítem) exige este
+  // permiso además del de siempre (orders:create/orders:amend) — se
+  // computa acá una sola vez y orders.service.js lo mira en assertEditable.
+  canAmendPaid: !!(req.appUser?.isSuperadmin || req.appUser?.permissions?.has('orders:amend_paid')),
+  ...extra,
+});
 
 router.get('/', requirePermission('orders:view'), asyncHandler(async (req, res) => {
   const { branchId, sessionId, status } = req.query;

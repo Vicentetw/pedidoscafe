@@ -123,14 +123,69 @@ function assertDraft(order) {
   }
 }
 
+// Ventana en la que un pedido YA confirmado todavía se puede tocar sin
+// pisarle el trabajo a cocina: CONFIRMED/QUEUED, antes de que cualquiera
+// de sus tickets pase a PREPARING (kitchen_ticket_items nunca se
+// actualiza ítem por ítem — sólo el ticket entero — así que ésta es la
+// única frontera segura con la granularidad que hay hoy). Pasado ese
+// punto, la única vía es cancelar el pedido completo (ya existe,
+// orders:cancel[_after_prep]) y cargar uno nuevo.
+const STAFF_AMENDABLE_STATUSES = new Set(['CONFIRMED', 'QUEUED']);
+
+// Pedido explícito de la aceptación: "quién puede modificar la orden [ya
+// confirmada/pagada] y cargar la modificación para que paguen la
+// diferencia". Antes de esto, CUALQUIER pedido no-DRAFT era intocable —
+// ni para agregar ni para sacar un ítem, así que un error de carga o un
+// "no hay stock" después de confirmar no tenía arreglo salvo cancelar
+// todo. Ahora, con el permiso orders:amend_paid, staff puede seguir
+// editando mientras nada se empezó a preparar todavía.
+function assertEditable(order, actor) {
+  if (['DRAFT', 'REJECTED_STOCK'].includes(order.status)) return;
+  if (STAFF_AMENDABLE_STATUSES.has(order.status)) {
+    if (actor.kind === 'staff' && actor.canAmendPaid) return;
+    if (actor.kind === 'staff') {
+      throw new ForbiddenError('Modificar un pedido ya confirmado requiere el permiso "orders:amend_paid".', { details: { permission: 'orders:amend_paid' } });
+    }
+    // El comensal nunca edita un pedido ya enviado, tenga o no el local
+    // habilitado orders:amend_paid para su staff — mismo código/mensaje
+    // que antes de esta función existir, para no romper ese contrato.
+    throw new ConflictError('Este pedido ya se envió a cocina; no se puede editar. Pedile al mozo si hace falta cambiar algo.', { code: 'ORDER_NOT_EDITABLE' });
+  }
+  throw new ConflictError(
+    'Este pedido ya está en preparación (o más adelante); no se puede editar. Cancelalo y cargá uno nuevo si hace falta.',
+    { code: 'ORDER_NOT_EDITABLE' }
+  );
+}
+
+// Compartido entre submitOrder (ruteo inicial) y el agregado post-confirmación
+// (ruteo del ítem nuevo) — arma un ticket por estación con los items dados.
+async function routeItemsToKitchen(tenantId, branchId, orderId, items, conn) {
+  const byStation = new Map();
+  for (const it of items) {
+    const stationId = await kitchenRepo.resolveStationFor(tenantId, branchId, it.product_id, null, conn);
+    await repo.setItemStation(tenantId, it.id, stationId, conn);
+    const key = stationId ?? 0;
+    if (!byStation.has(key)) byStation.set(key, { stationId, items: [] });
+    byStation.get(key).items.push(it);
+  }
+  const ticketIds = [];
+  for (const grp of byStation.values()) {
+    const no = await kitchenRepo.nextTicketNo(tenantId, branchId, conn);
+    const tid = await kitchenRepo.createTicket(tenantId, branchId, orderId, grp.stationId, no, grp.items, conn);
+    ticketIds.push({ id: tid, stationId: grp.stationId, no });
+  }
+  return ticketIds;
+}
+
 async function addItem(tenantId, orderId, input, actor) {
   const order = await repo.findOrder(tenantId, orderId);
   if (!order) throw new NotFoundError('Ese pedido no existe.');
-  assertDraft(order);
+  assertEditable(order, actor);
+  const staffAmend = !['DRAFT', 'REJECTED_STOCK'].includes(order.status);
   const priced = await resolvePricedItem(tenantId, order.branch_id, input, pool);
 
   await withTransaction(async (conn) => {
-    await repo.addItem(tenantId, orderId, {
+    const itemId = await repo.addItem(tenantId, orderId, {
       ...priced,
       participantId: order.participant_id,
       note: input.note ?? null,
@@ -138,9 +193,22 @@ async function addItem(tenantId, orderId, input, actor) {
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn); // no-op si no hay promo aplicada
+    if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+    if (staffAmend) {
+      // Ticket de seguimiento SÓLO con el ítem nuevo — el original ya
+      // salió, esto es lo único que cocina todavía no vio. No reserva
+      // stock de ingredientes (ver nota en removeItem): un agregado
+      // post-confirmación no pasa por la reserva pesimista de la Fase 5.
+      const newItem = items.find((i) => i.id === itemId);
+      await routeItemsToKitchen(tenantId, order.branch_id, orderId, [newItem], conn);
+      await enqueue(conn, { tenantId, branchId: order.branch_id, type: 'OrderAmended', payload: { orderId, itemId, kind: 'add' } });
+    }
+    return itemId;
   });
 
-  if (order.session_id) {
+  if (staffAmend) {
+    publish({ tenantId, branchId: order.branch_id, topic: 'kitchen', event: 'ticket_new', data: { orderId } });
+  } else if (order.session_id) {
     publish({ tenantId, branchId: order.branch_id, topic: 'session', event: 'someone_ordering',
       data: { sessionId: await sessionPublicId(order.session_id), participantId: order.participant_id } });
   }
@@ -150,7 +218,8 @@ async function addItem(tenantId, orderId, input, actor) {
 async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
   const order = await repo.findOrder(tenantId, orderId);
   if (!order) throw new NotFoundError('Ese pedido no existe.');
-  assertDraft(order);
+  assertEditable(order, actor);
+  const staffAmend = !['DRAFT', 'REJECTED_STOCK'].includes(order.status);
   const item = await repo.findItem(tenantId, orderId, itemId);
   if (!item) throw new NotFoundError('Ese ítem no existe en el pedido.');
   const q = Math.max(1, Math.trunc(qty));
@@ -160,6 +229,7 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn);
+    if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
   });
   return getOrder(tenantId, orderId);
 }
@@ -167,12 +237,24 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
 async function removeItem(tenantId, orderId, itemId, actor) {
   const order = await repo.findOrder(tenantId, orderId);
   if (!order) throw new NotFoundError('Ese pedido no existe.');
-  assertDraft(order);
+  assertEditable(order, actor);
+  const staffAmend = !['DRAFT', 'REJECTED_STOCK'].includes(order.status);
   await withTransaction(async (conn) => {
+    // ON DELETE CASCADE se lleva puesto el kitchen_ticket_item si ya
+    // había uno (sólo pasa en staffAmend) — seguro porque assertEditable
+    // sólo deja tocar CONFIRMED/QUEUED, nunca algo ya en PREPARING.
     await repo.deleteItem(tenantId, orderId, itemId, conn);
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn);
+    if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+    // Nota honesta: esto NO libera la reserva de stock de ingredientes de
+    // ese ítem (Fase 5) — reconciliar eso a nivel de un solo ítem no
+    // existe hoy (las reservas se trackean por PEDIDO, no por ítem). Si
+    // el pedido se cancela entero más tarde, ahí sí se libera todo.
+    if (staffAmend) {
+      await enqueue(conn, { tenantId, branchId: order.branch_id, type: 'OrderAmended', payload: { orderId, itemId, kind: 'remove' } });
+    }
   });
   return getOrder(tenantId, orderId);
 }
