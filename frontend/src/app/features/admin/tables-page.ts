@@ -236,7 +236,11 @@ export class TablesPage implements OnInit, OnDestroy {
   close(s: OpenSession) {
     this.api.post(`/api/tables/sessions/${s.id}/close`, {}).subscribe({
       next: () => { this.openSession.set(null); this.loadSessions(); this.loadTables(); },
-      error: (e) => this.fail(e, e?.error?.error ?? 'No se pudo cerrar (¿saldo pendiente?).'),
+      error: (e) => {
+        const msg = e?.error?.error ?? 'No se pudo cerrar (¿saldo pendiente?).';
+        this.fail(e, msg);
+        alert(msg); // este aviso no se puede pasar por alto — se ve como modal
+      },
     });
   }
   forceClose(s: OpenSession) {
