@@ -74,7 +74,7 @@ const STATUS_BADGE: Record<string, string> = {
         </div>
         <p class="muted small">Se paga online (MercadoPago).</p>
       </div>
-    } @else if (hasBalance()) {
+    } @else if (hasBalance() && hasTotal()) {
       <div class="card paid-card"><p class="muted small">La mesa ya está saldada 🎉</p></div>
     }
 
@@ -168,6 +168,11 @@ export class OrderPanel implements OnInit {
   readonly balance = signal<any>(null);
   readonly hasBalance = () => this.balance() != null;
   readonly remaining = () => Number(this.balance()?.remaining ?? 0);
+  // "Saldada" sólo tiene sentido si HABÍA algo que pagar — si todavía no
+  // se confirmó ningún pedido, total=0 y remaining=0 por igual, pero eso
+  // no es "ya pagaste", es "todavía no pediste nada" (bug real reportado:
+  // el mensaje aparecía apenas se entraba a la mesa, antes de pedir nada).
+  readonly hasTotal = () => Number(this.balance()?.total ?? 0) > 0;
   // Cuánto falta pagar de MI parte puntual (no el total de la mesa) — se
   // busca cruzando "quién soy" (participants[].isYou) contra
   // balance().byParticipant, que viene indexado por el mismo public_id.
