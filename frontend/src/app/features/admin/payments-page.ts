@@ -71,20 +71,44 @@ const STATUS_LABEL: Record<string, string> = {
             <p>Total: {{ bal.currency }} {{ bal.total }} · Pagado: {{ bal.currency }} {{ bal.paid }} · <strong>Falta: {{ bal.currency }} {{ bal.remaining }}</strong></p>
 
             @if (+bal.remaining > 0) {
-              <div class="row">
-                <button class="primary" [disabled]="busy()" (click)="chargeGroup()">Cobrar todo (efectivo)</button>
-                <input type="number" placeholder="partes" [(ngModel)]="parts" style="max-width:90px" />
-                <button [disabled]="busy()" (click)="splitEqual()">Dividir en partes iguales</button>
-              </div>
-              <h4>Por persona</h4>
-              <ul>
-                @for (p of bal.byParticipant; track p.participantId) {
-                  <li>
-                    {{ p.name }}: debe {{ bal.currency }} {{ p.remaining }}
-                    @if (+p.remaining > 0) { <button (click)="chargeIndividual(p.participantId)">Cobrar (efectivo)</button> }
-                  </li>
-                }
-              </ul>
+              @if (cashPrompt(); as cp) {
+                <div class="card cash-modal">
+                  <h4>Cobrar en efectivo — {{ cp.label }}</h4>
+                  <p>Monto a cobrar: <strong>{{ bal.currency }} {{ cp.amountDue.toFixed(2) }}</strong></p>
+                  <label>Monto que entrega el cliente (opcional — dejalo vacío si entrega justo)
+                    <input type="number" min="0" step="0.01" [(ngModel)]="tendered" [placeholder]="cp.amountDue.toFixed(2)" />
+                  </label>
+                  @if (changeAmount(cp) > 0) {
+                    <p class="ok">Vuelto a entregar: <strong>{{ bal.currency }} {{ changeAmount(cp).toFixed(2) }}</strong></p>
+                  }
+                  @if (tenderedShort(cp)) {
+                    <p class="err">Lo que entrega es menos de lo que falta cobrar — pedile el resto o cancelá.</p>
+                  }
+                  <div class="row">
+                    <button class="primary" [disabled]="busy() || tenderedShort(cp)" (click)="confirmCash(cp)">
+                      {{ busy() ? 'Cobrando…' : 'Confirmar cobro' }}
+                    </button>
+                    <button [disabled]="busy()" (click)="cashPrompt.set(null)">Cancelar</button>
+                  </div>
+                </div>
+              } @else {
+                <div class="row">
+                  <button class="primary" [disabled]="busy()" (click)="openCash('GROUP', 'Toda la mesa', +bal.remaining)">Cobrar todo (efectivo)</button>
+                  <input type="number" placeholder="partes" [(ngModel)]="parts" style="max-width:90px" />
+                  <button [disabled]="busy()" (click)="splitEqual()">Dividir en partes iguales</button>
+                </div>
+                <h4>Por persona</h4>
+                <ul>
+                  @for (p of bal.byParticipant; track p.participantId) {
+                    <li>
+                      {{ p.name }}: debe {{ bal.currency }} {{ p.remaining }}
+                      @if (+p.remaining > 0) {
+                        <button (click)="openCash('INDIVIDUAL', p.name, +p.remaining, p.participantId)">Cobrar (efectivo)</button>
+                      }
+                    </li>
+                  }
+                </ul>
+              }
             } @else {
               <p class="muted">Saldada.</p>
             }
@@ -154,6 +178,10 @@ const STATUS_LABEL: Record<string, string> = {
     .flabel { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
     .flabel input { width: auto; }
     .pager { justify-content: space-between; }
+    .err { color: var(--danger); }
+    .ok { color: var(--success); }
+    .cash-modal { background: var(--surface-2); gap: var(--space-2); display: flex; flex-direction: column; }
+    .cash-modal label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
   `],
 })
 export class PaymentsPage implements OnInit {
@@ -239,6 +267,7 @@ export class PaymentsPage implements OnInit {
   }
   select(s: OpenSession) {
     this.selected.set(s);
+    this.cashPrompt.set(null);
     this.reload();
   }
   private reload() {
@@ -247,13 +276,42 @@ export class PaymentsPage implements OnInit {
     this.api.get<{ data: Payment[] }>(`/api/payments?sessionId=${id}`).subscribe({ next: (r) => this.payments.set(r.data), error: () => {} });
   }
 
-  chargeGroup() {
-    this.run(this.api.post(`/api/payments/sessions/${this.selected()!.id}/charges`, { mode: 'GROUP', provider: 'CASH' }));
+  // -------- cobro en efectivo: monto que entrega el cliente + vuelto ----
+  // El backend siempre cobra el saldo EXACTO (nunca de más ni de menos) —
+  // "lo que entrega" es sólo para calcularle el vuelto al cajero, no cambia
+  // el monto que se registra como pagado.
+  readonly cashPrompt = signal<{ kind: 'GROUP' | 'INDIVIDUAL'; label: string; amountDue: number; participantId?: string } | null>(null);
+  tendered = '';
+
+  openCash(kind: 'GROUP' | 'INDIVIDUAL', label: string, amountDue: number, participantId?: string) {
+    this.error.set('');
+    this.tendered = '';
+    this.cashPrompt.set({ kind, label, amountDue, participantId });
   }
-  chargeIndividual(participantId: string) {
-    this.run(this.api.post(`/api/payments/sessions/${this.selected()!.id}/charges`, { mode: 'INDIVIDUAL', participantId, provider: 'CASH' }));
+  changeAmount(cp: { amountDue: number }): number {
+    const t = Number(this.tendered);
+    return t > cp.amountDue ? t - cp.amountDue : 0;
+  }
+  tenderedShort(cp: { amountDue: number }): boolean {
+    const t = Number(this.tendered);
+    return this.tendered.trim() !== '' && t > 0 && t < cp.amountDue;
+  }
+  confirmCash(cp: { kind: 'GROUP' | 'INDIVIDUAL'; label: string; amountDue: number; participantId?: string }) {
+    if (this.tenderedShort(cp)) return;
+    const change = this.changeAmount(cp);
+    const changeMsg = change > 0 ? ` Vuelto: ${change.toFixed(2)}.` : '';
+    if (!confirm(`¿Confirmás el cobro en efectivo de ${cp.amountDue.toFixed(2)} — ${cp.label}?${changeMsg}`)) return;
+    const body: any = { mode: cp.kind, provider: 'CASH' };
+    if (cp.kind === 'INDIVIDUAL') body.participantId = cp.participantId;
+    this.error.set('');
+    this.busy.set(true);
+    this.api.post(`/api/payments/sessions/${this.selected()!.id}/charges`, body).subscribe({
+      next: () => { this.busy.set(false); this.cashPrompt.set(null); this.reload(); this.pickBranch(this.branchId()!); },
+      error: (e) => { this.busy.set(false); this.fail(e, 'No se pudo completar el cobro.'); },
+    });
   }
   splitEqual() {
+    if (!confirm(`¿Confirmás dividir la cuenta en ${this.parts} partes iguales y cobrarlas en efectivo?`)) return;
     this.run(this.api.post(`/api/payments/sessions/${this.selected()!.id}/split-equal`, { parts: this.parts }));
   }
   refund(p: Payment) {
