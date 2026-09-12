@@ -273,6 +273,15 @@ async function allowsIndividualPayment(tenantId, branchId) {
 async function getGuestSession(scope) {
   const s = await repo.findSessionById(scope.tenantId, scope.sessionId);
   if (!s) throw new NotFoundError('Tu sesión de mesa ya no existe.');
+  // Bug real reportado: force-close en el panel de staff dejaba la mesa
+  // "libre" ahí, pero el comensal que refrescaba seguía viendo la sesión
+  // vieja tal cual (esta función nunca miraba el status) — el token seguía
+  // siendo válido, así que no había forma de que se enterara. Con esto, el
+  // refresh() del frontend recibe un error claro y limpia el token guardado
+  // (mismo camino que un 401/404: ver core/table-session.ts).
+  if (TERMINAL.has(s.status)) {
+    throw new ConflictError('Esta mesa ya se cerró. Si volviste a la mesa, escaneá el código de nuevo.', { code: 'SESSION_CLOSED' });
+  }
   const participants = await repo.listParticipants(scope.tenantId, scope.sessionId);
   return {
     session: publicSessionView(s),

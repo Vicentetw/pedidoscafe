@@ -1,5 +1,6 @@
 import { Component, OnDestroy, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { RouterLink } from '@angular/router';
 import * as QRCode from 'qrcode';
 import { Api } from '../../core/api';
 import { CurrentUserService } from '../../core/current-user';
@@ -23,7 +24,7 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
 // esto, el token opaco es todo lo que necesita el código QR.
 @Component({
   selector: 'app-tables-page',
-  imports: [FormsModule, SessionOrderDetail],
+  imports: [FormsModule, RouterLink, SessionOrderDetail],
   template: `
     <h1>Mesas</h1>
     @if (error()) { <p class="err">{{ error() }}</p> }
@@ -95,6 +96,9 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
                 <div class="detail">
                   <app-session-order-detail [sessionId]="s.id" (changed)="loadSessions()" />
                   <div class="row">
+                    @if (canCharge()) {
+                      <a class="cash-link" [routerLink]="['/admin/caja']" [queryParams]="{ branchId: branchId(), sessionId: s.id }">💳 Cobrar en Caja</a>
+                    }
                     <button (click)="close(s)">Cerrar</button>
                     @if (canForceClose()) { <button class="danger" (click)="forceClose(s)">Cierre forzado</button> }
                   </div>
@@ -131,6 +135,12 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
     .srow.sel { border-color: var(--primary); }
     .chev { color: var(--muted); font-size: .75rem; }
     .detail { padding: var(--space-3) 8px 4px; }
+    .cash-link {
+      display: inline-flex; align-items: center; gap: 4px; text-decoration: none;
+      background: var(--primary); color: var(--primary-contrast); font-weight: 600;
+      border-radius: var(--radius-sm); padding: 0.6rem 1.1rem; box-shadow: var(--shadow-1);
+    }
+    .cash-link:hover { background: var(--primary-hover); }
   `],
 })
 export class TablesPage implements OnInit, OnDestroy {
@@ -155,6 +165,7 @@ export class TablesPage implements OnInit, OnDestroy {
 
   canManage() { return this.currentUser.hasPermission('tables:manage'); }
   canForceClose() { return this.currentUser.hasPermission('tables:force_close'); }
+  canCharge() { return this.currentUser.hasPermission('payments:charge'); }
   badgeClass(status: string) { return STATUS_BADGE[status] ?? 'badge'; }
   statusLabel(status: string) { return STATUS_LABEL[status] ?? status; }
   linkFor(t: Table) { return `${location.origin}/t/${t.qr_token}`; }

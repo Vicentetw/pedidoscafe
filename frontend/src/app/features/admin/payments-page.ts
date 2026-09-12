@@ -1,5 +1,6 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { Api } from '../../core/api';
 
 interface Branch { id: number; name: string; }
@@ -186,6 +187,9 @@ const STATUS_LABEL: Record<string, string> = {
 })
 export class PaymentsPage implements OnInit {
   private readonly api = inject(Api);
+  private readonly route = inject(ActivatedRoute);
+  // Llegada directa desde "💳 Cobrar en Caja" en Mesas (?branchId=&sessionId=)
+  private pendingSessionId: number | null = null;
 
   readonly branches = signal<Branch[]>([]);
   readonly branchId = signal<number | null>(null);
@@ -248,8 +252,16 @@ export class PaymentsPage implements OnInit {
   }
 
   ngOnInit() {
+    const qp = this.route.snapshot.queryParamMap;
+    const qBranch = qp.get('branchId') ? +qp.get('branchId')! : null;
+    this.pendingSessionId = qp.get('sessionId') ? +qp.get('sessionId')! : null;
+
     this.api.get<{ data: Branch[] }>('/api/platform/branches').subscribe({
-      next: (r) => { this.branches.set(r.data); if (r.data[0]) this.pickBranch(r.data[0].id); },
+      next: (r) => {
+        this.branches.set(r.data);
+        const target = qBranch && r.data.some((b) => b.id === qBranch) ? qBranch : r.data[0]?.id;
+        if (target) this.pickBranch(target);
+      },
       error: (e) => this.fail(e, 'No se pudieron cargar las sucursales.'),
     });
   }
@@ -260,7 +272,15 @@ export class PaymentsPage implements OnInit {
     this.selected.set(null);
     this.balance.set(null);
     this.api.get<{ data: OpenSession[] }>(`/api/tables/sessions/open?branchId=${id}`).subscribe({
-      next: (r) => this.sessions.set(r.data), error: (e) => this.fail(e, 'No se pudieron cargar las mesas.'),
+      next: (r) => {
+        this.sessions.set(r.data);
+        if (this.pendingSessionId) {
+          const match = r.data.find((s) => s.id === this.pendingSessionId);
+          this.pendingSessionId = null;
+          if (match) this.select(match);
+        }
+      },
+      error: (e) => this.fail(e, 'No se pudieron cargar las mesas.'),
     });
     this.api.get<any>(`/api/payments/reconciliation?branchId=${id}`).subscribe({ next: (r) => this.reconciliation.set(r), error: () => this.reconciliation.set(null) });
     if (this.mode() === 'historial') this.loadHistory();

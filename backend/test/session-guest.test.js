@@ -7,6 +7,7 @@ const assert = require('node:assert/strict');
 const db = require('../src/db');
 const { startTestServer } = require('./helpers/server');
 const repo = require('../src/modules/tables/tables.repository');
+const tablesSvc = require('../src/modules/tables/tables.service');
 const { issueTableSessionToken } = require('../src/auth/sessionToken');
 
 const T = 999991;
@@ -21,6 +22,11 @@ async function cleanup() {
   await db.query('DELETE FROM tables WHERE tenant_id = ?', [T]);
   await db.query('DELETE FROM domain_events WHERE tenant_id = ?', [T]);
   await db.query('DELETE FROM settings WHERE tenant_id = ?', [T]);
+  // El force-close escribe auditoría (writeAudit) — sin este DELETE, el
+  // primer test que dispare un force-close rompe el cleanup final con
+  // ER_ROW_IS_REFERENCED_2 contra `tenants` (mismo tipo de gap ya
+  // encontrado antes acá con `settings`).
+  await db.query('DELETE FROM audit_log WHERE tenant_id = ?', [T]);
   await db.query('DELETE FROM branches WHERE tenant_id = ?', [T]);
   await db.query('DELETE FROM tenants WHERE id = ?', [T]);
 }
@@ -184,4 +190,24 @@ test('un JWT con secreto inventado -> 401', async () => {
   const orphan = issueTableSessionToken({ sessionId: 987654321, sessionPublicId: 'X'.repeat(26), tenantId: T, branchId: ctx.branchId, tableId: 1, participantId: 1 });
   const res2 = await fetch(`${srv.baseUrl}/api/session`, { headers: auth(orphan) });
   assert.equal(res2.status, 404);
+});
+
+// Bug real reportado: force-close dejaba la mesa "libre" para staff, pero
+// el comensal que refrescaba seguía viendo la sesión vieja como si nada
+// (el token seguía siendo válido y GET /api/session nunca miraba el
+// status). Ahora corta con un código claro que el frontend usa para
+// limpiar el token guardado.
+test('GET /api/session después de un force-close -> 409 SESSION_CLOSED', async () => {
+  const [t] = await db.query('INSERT INTO tables (tenant_id, branch_id, code) VALUES (?, ?, ?)', [T, ctx.branchId, 'FC1']);
+  const tok = await repo.createQrToken(T, ctx.branchId, t.insertId);
+  const started = await (await fetch(`${srv.baseUrl}/api/public/table-sessions`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ qrToken: tok, displayName: 'Fer' }),
+  })).json();
+  const [[sess]] = await db.query('SELECT id FROM table_sessions WHERE public_id = ?', [started.session.id]);
+
+  await tablesSvc.forceCloseSession(T, sess.id, 'prueba', {});
+
+  const res = await fetch(`${srv.baseUrl}/api/session`, { headers: auth(started.token) });
+  assert.equal(res.status, 409);
+  assert.equal((await res.json()).code, 'SESSION_CLOSED');
 });

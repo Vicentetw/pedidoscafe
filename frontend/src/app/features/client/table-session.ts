@@ -24,6 +24,9 @@ import { OrderPanel } from './order-panel';
           <h1>{{ place().table }}</h1>
           <p class="muted branch">{{ place().branch }}</p>
 
+          @if (sessionClosedNote()) {
+            <p class="muted small closed-note">La mesa anterior ya se cerró — entrá de nuevo.</p>
+          }
           <div class="card join-card">
             @if (!nameTaken()) {
               <label for="name">¿Cómo te llamás?</label>
@@ -117,6 +120,7 @@ import { OrderPanel } from './order-panel';
     .join-screen h1 { margin: 2px 0 0; }
     .branch { margin: 0 0 var(--space-5); }
     .join-card { text-align: left; max-width: 360px; margin: 0 auto; }
+    .closed-note { max-width: 360px; margin: 0 auto var(--space-3); text-align: center; }
 
     .top { display: flex; align-items: baseline; justify-content: space-between; }
     .top h1 { margin-bottom: 0; }
@@ -176,6 +180,7 @@ export class TableSession implements OnInit, OnDestroy {
   // la mesa apenas fallara sacar a alguien.
   readonly actionError = signal('');
   readonly shareCopied = signal(false);
+  readonly sessionClosedNote = signal(false);
 
   name = '';
   extraName = '';
@@ -195,7 +200,10 @@ export class TableSession implements OnInit, OnDestroy {
       // aunque haya cerrado la app)? Si sigue vigente, recupera el mismo
       // participante en vez de sumar uno nuevo.
       if (this.svc.loadStoredToken(this.qrToken)) {
-        const s = await this.svc.refresh().catch(() => null);
+        const s = await this.svc.refresh().catch((e: any) => {
+          if (e?.error?.code === 'SESSION_CLOSED') this.sessionClosedNote.set(true);
+          return null;
+        });
         if (s) { this.joined.set(true); this.subscribe(); }
       }
     } catch (e: any) {

@@ -98,7 +98,10 @@ export class TableSessionService {
       this.state.set(s);
       return s;
     } catch (e: any) {
-      if (e?.status === 401 || e?.status === 404) this.clear();
+      // 401/404 = token vencido o mesa inexistente; SESSION_CLOSED = la
+      // mesa se cerró (force-close u otro) — en los tres casos el token
+      // guardado ya no sirve, hay que limpiarlo.
+      if (e?.status === 401 || e?.status === 404 || e?.error?.code === 'SESSION_CLOSED') this.clear();
       throw e;
     }
   }
