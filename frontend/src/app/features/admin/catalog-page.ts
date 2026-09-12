@@ -8,6 +8,7 @@ interface Category { id: number; menu_id: number; code: string; name: string; }
 interface Product {
   id: number; category_id: number; code: string; name: string;
   base_price: string; currency: string; is_active: boolean;
+  track_stock: boolean; stock_qty: number | null; stock_min: number | null;
 }
 
 @Component({
@@ -60,12 +61,42 @@ interface Product {
     @if (selCat()) {
       <div class="card">
         <h3>Productos de "{{ selCat()!.name }}"</h3>
+        <input class="search" placeholder="🔎 Buscar por nombre o código…" [(ngModel)]="search" />
         <table style="width:100%; border-collapse:collapse;">
-          <thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Activo</th></tr></thead>
+          <thead><tr><th>Código</th><th>Nombre</th><th>Precio</th><th>Estado</th><th>Stock</th><th></th></tr></thead>
           <tbody>
-            @for (p of productsOfCat(); track p.id) {
-              <tr><td>{{ p.code }}</td><td>{{ p.name }}</td><td>{{ p.currency }} {{ p.base_price }}</td><td>{{ p.is_active ? 'sí' : 'no' }}</td></tr>
-            } @empty { <tr><td colspan="4" class="muted">Sin productos.</td></tr> }
+            @for (p of filteredProducts(); track p.id) {
+              <tr>
+                <td>{{ p.code }}</td><td>{{ p.name }}</td><td>{{ p.currency }} {{ p.base_price }}</td>
+                <td>
+                  @if (!p.is_active) { <span class="badge">Oculto</span> }
+                  @else if (p.track_stock && (p.stock_qty ?? 0) <= 0) { <span class="badge badge-danger">Agotado</span> }
+                  @else if (p.track_stock && p.stock_min != null && (p.stock_qty ?? 0) <= p.stock_min) { <span class="badge badge-warning">Queda poco</span> }
+                  @else { <span class="badge badge-success">Visible</span> }
+                </td>
+                <td>{{ p.track_stock ? (p.stock_qty ?? 0) : '—' }}</td>
+                <td>
+                  @if (canManage()) {
+                    <button class="link" (click)="toggleEdit(p)">{{ editingId() === p.id ? 'cerrar' : 'editar' }}</button>
+                  }
+                </td>
+              </tr>
+              @if (editingId() === p.id) {
+                <tr class="edit-row">
+                  <td colspan="6">
+                    <div class="edit-form">
+                      <label><input type="checkbox" [(ngModel)]="edIsActive" /> Mostrar en el menú</label>
+                      <label><input type="checkbox" [(ngModel)]="edTrackStock" /> Controlar stock</label>
+                      @if (edTrackStock) {
+                        <label>Cantidad disponible <input type="number" min="0" [(ngModel)]="edStockQty" style="width:80px" /></label>
+                        <label>Avisar cuando quede <input type="number" min="0" [(ngModel)]="edStockMin" style="width:80px" /></label>
+                      }
+                      <button class="primary" [disabled]="savingEdit()" (click)="saveEdit(p)">Guardar</button>
+                    </div>
+                  </td>
+                </tr>
+              }
+            } @empty { <tr><td colspan="6" class="muted">Sin productos{{ search ? ' que coincidan.' : '.' }}</td></tr> }
           </tbody>
         </table>
         @if (canManage()) {
@@ -86,6 +117,10 @@ interface Product {
     button.link { border:none; background:none; color:var(--primary); padding:2px 4px; }
     button.link.sel { font-weight:700; text-decoration:underline; }
     ul { padding-left: 18px; }
+    .search { max-width: 320px; margin-bottom: 10px; }
+    .edit-row td { padding: 10px; background: var(--surface-2); }
+    .edit-form { display: flex; gap: 14px; align-items: center; flex-wrap: wrap; font-size: .88rem; }
+    .edit-form label { display: flex; align-items: center; gap: 6px; }
   `],
 })
 export class CatalogPage implements OnInit {
@@ -103,10 +138,43 @@ export class CatalogPage implements OnInit {
     const c = this.selCat();
     return c ? this.products().filter((p) => p.category_id === c.id) : [];
   });
+  search = '';
+  readonly filteredProducts = computed(() => {
+    const q = this.search.trim().toLowerCase();
+    const list = this.productsOfCat();
+    if (!q) return list;
+    return list.filter((p) => p.name.toLowerCase().includes(q) || p.code.toLowerCase().includes(q));
+  });
+
+  readonly editingId = signal<number | null>(null);
+  readonly savingEdit = signal(false);
+  edIsActive = true;
+  edTrackStock = false;
+  edStockQty: number | null = null;
+  edStockMin: number | null = null;
 
   newMenuCode = ''; newMenuName = '';
   newCatCode = ''; newCatName = '';
   npCode = ''; npName = ''; npPrice: number | null = null;
+
+  toggleEdit(p: Product) {
+    if (this.editingId() === p.id) { this.editingId.set(null); return; }
+    this.editingId.set(p.id);
+    this.edIsActive = p.is_active;
+    this.edTrackStock = p.track_stock;
+    this.edStockQty = p.stock_qty;
+    this.edStockMin = p.stock_min;
+  }
+  saveEdit(p: Product) {
+    this.error.set('');
+    this.savingEdit.set(true);
+    const body: any = { isActive: this.edIsActive, trackStock: this.edTrackStock };
+    if (this.edTrackStock) { body.stockQty = this.edStockQty ?? 0; body.stockMin = this.edStockMin; }
+    this.api.patch(`/api/catalog/products/${p.id}`, body).subscribe({
+      next: () => { this.savingEdit.set(false); this.editingId.set(null); this.pickCat(this.selCat()!); },
+      error: (e) => { this.savingEdit.set(false); this.fail(e, 'No se pudo guardar.'); },
+    });
+  }
 
   canManage() { return this.currentUser.hasPermission('catalog:manage'); }
 

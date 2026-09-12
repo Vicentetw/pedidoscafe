@@ -74,7 +74,13 @@ async function deleteCategory(tenantId, id, req) {
 
 // ========================================================= productos
 function shapeProduct(p, overrides = []) {
-  return { ...p, requires_age_verification: !!p.requires_age_verification, is_active: !!p.is_active, branchOverrides: overrides };
+  return {
+    ...p,
+    requires_age_verification: !!p.requires_age_verification,
+    is_active: !!p.is_active,
+    track_stock: !!p.track_stock,
+    branchOverrides: overrides,
+  };
 }
 async function listProducts(tenantId, query) {
   return (await repo.listProducts(tenantId, query)).map((p) => shapeProduct(p));
@@ -206,6 +212,18 @@ function categoryActiveNow(cat, now) {
   return true;
 }
 
+// Combina el stock simple por producto (track_stock/stock_qty, pedido en
+// la aceptación) con el de ingredientes/recetas (Fase 5) — el que sea más
+// restrictivo manda. Un producto normalmente usa uno u otro, no los dos,
+// pero si alguien cargara ambos, ganar el menor es lo seguro (nunca
+// mostrar más disponible de lo que en realidad hay).
+function effectiveStock(p, ingredientRemaining) {
+  if (!p.track_stock) return ingredientRemaining;
+  const simple = p.stock_qty == null ? 0 : Number(p.stock_qty);
+  if (ingredientRemaining == null) return simple;
+  return Math.min(simple, ingredientRemaining);
+}
+
 function publicProductView(p, stockRemaining = null) {
   const overridePrice = p.override_price;
   const overrideAvailable = p.override_available;
@@ -258,7 +276,7 @@ async function getPublicMenu(tenantId, branchCode) {
           icon: c.icon,
           products: c.products
             .filter((p) => p.override_available !== 0)
-            .map((p) => publicProductView(p, availMap.get(p.id))),
+            .map((p) => publicProductView(p, effectiveStock(p, availMap.get(p.id)))),
         }))
         .filter((c) => c.products.length),
     }))

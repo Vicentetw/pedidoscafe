@@ -48,6 +48,10 @@ const createProduct = z.object({
   requiresAgeVerification: z.boolean().default(false),
   isActive: z.boolean().default(true),
   sortOrder: z.coerce.number().int().default(0),
+  // Stock simple (pedido en la aceptación) — ver migración 0015.
+  trackStock: z.boolean().default(false),
+  stockQty: z.coerce.number().int().min(0).max(999999).nullable().optional(),
+  stockMin: z.coerce.number().int().min(0).max(999999).nullable().optional(),
 });
 // update NO incluye basePrice — el precio va por su propio endpoint (permiso aparte)
 const updateProduct = createProduct.partial().omit({ code: true, basePrice: true, currency: true });

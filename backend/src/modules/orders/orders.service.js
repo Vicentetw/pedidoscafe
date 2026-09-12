@@ -13,6 +13,7 @@ const { NotFoundError, ConflictError, ValidationError, ForbiddenError, DomainErr
 // STOCK — reserva pesimista (Fase 5). Corre DENTRO de la transacción del
 // submit; `SELECT ... FOR UPDATE` sobre las filas de `stock`.
 const stockService = require('../inventory/stock.service');
+const catalogRepo = require('../catalog/catalog.repository');
 const crmRepo = require('../crm/crm.repository');
 const promotionsService = require('../promotions/promotions.service');
 async function validateAndReserveStock(tenantId, branchId, items, conn, orderId) {
@@ -20,6 +21,39 @@ async function validateAndReserveStock(tenantId, branchId, items, conn, orderId)
 }
 async function releaseStockFor(tenantId, orderId, conn) {
   return stockService.releaseForOrder(tenantId, orderId, conn);
+}
+
+// Stock SIMPLE por producto (pedido en la aceptación, alternativa liviana
+// al de ingredientes/recetas de arriba — un producto usa uno u otro).
+// decrementStock ya es atómico por fila (UPDATE ... WHERE stock_qty >=
+// :qty); si un ítem de la lista falla, se compensa (restoreStock) lo que
+// ya se había descontado de los ítems anteriores, para no dejar la mesa
+// a mitad de camino cuando el pedido entero se rechaza.
+async function validateAndDecrementSimpleStock(tenantId, items, conn) {
+  const applied = [];
+  const unavailable = [];
+  const lowStock = [];
+  for (const it of items) {
+    const info = await catalogRepo.findStockInfo(tenantId, it.product_id, conn);
+    if (!info || !info.track_stock) continue;
+    const ok = await catalogRepo.decrementStock(tenantId, it.product_id, it.qty, conn);
+    if (!ok) { unavailable.push({ name: info.name }); break; }
+    const remaining = (info.stock_qty ?? 0) - it.qty;
+    applied.push({ productId: it.product_id, qty: it.qty });
+    if (info.stock_min != null && remaining <= info.stock_min) lowStock.push({ productId: it.product_id, name: info.name, remaining });
+  }
+  if (unavailable.length) {
+    for (const a of applied) await catalogRepo.restoreStock(tenantId, a.productId, a.qty, conn);
+    return { ok: false, unavailable };
+  }
+  return { ok: true, lowStock };
+}
+async function restoreSimpleStockFor(tenantId, orderId, conn) {
+  const items = await repo.listItems(tenantId, orderId, conn);
+  for (const it of items) {
+    const info = await catalogRepo.findStockInfo(tenantId, it.product_id, conn);
+    if (info && info.track_stock) await catalogRepo.restoreStock(tenantId, it.product_id, it.qty, conn);
+  }
 }
 // ---------------------------------------------------------------------------
 
@@ -191,13 +225,23 @@ async function addItem(tenantId, orderId, input, actor) {
       note: input.note ?? null,
     }, conn);
     const items = await repo.listItems(tenantId, orderId, conn);
+    if (staffAmend) {
+      // Stock simple (liviano, atómico) SÍ se descuenta acá — a
+      // diferencia del de ingredientes/recetas (Fase 5, ver nota abajo
+      // en removeItem), no exige una reserva de dos fases.
+      const newItem = items.find((i) => i.id === itemId);
+      const stockCheck = await validateAndDecrementSimpleStock(tenantId, [newItem], conn);
+      if (!stockCheck.ok) {
+        throw new DomainError(`No hay stock de "${stockCheck.unavailable[0].name}" para agregarlo ahora.`, { status: 200, code: 'ITEM_UNAVAILABLE' });
+      }
+    }
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn); // no-op si no hay promo aplicada
     if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
     if (staffAmend) {
       // Ticket de seguimiento SÓLO con el ítem nuevo — el original ya
       // salió, esto es lo único que cocina todavía no vio. No reserva
-      // stock de ingredientes (ver nota en removeItem): un agregado
+      // stock de INGREDIENTES (ver nota en removeItem): un agregado
       // post-confirmación no pasa por la reserva pesimista de la Fase 5.
       const newItem = items.find((i) => i.id === itemId);
       await routeItemsToKitchen(tenantId, order.branch_id, orderId, [newItem], conn);
@@ -239,11 +283,19 @@ async function removeItem(tenantId, orderId, itemId, actor) {
   if (!order) throw new NotFoundError('Ese pedido no existe.');
   assertEditable(order, actor);
   const staffAmend = !['DRAFT', 'REJECTED_STOCK'].includes(order.status);
+  const removedItem = staffAmend ? await repo.findItem(tenantId, orderId, itemId) : null;
   await withTransaction(async (conn) => {
     // ON DELETE CASCADE se lleva puesto el kitchen_ticket_item si ya
     // había uno (sólo pasa en staffAmend) — seguro porque assertEditable
     // sólo deja tocar CONFIRMED/QUEUED, nunca algo ya en PREPARING.
     await repo.deleteItem(tenantId, orderId, itemId, conn);
+    // Stock simple: SÍ se devuelve acá (a diferencia del de
+    // ingredientes/recetas — ver nota más abajo — restaurar uno solo es
+    // una resta directa, no hace falta deshacer ningún cálculo de receta).
+    if (staffAmend && removedItem) {
+      const info = await catalogRepo.findStockInfo(tenantId, removedItem.product_id, conn);
+      if (info && info.track_stock) await catalogRepo.restoreStock(tenantId, removedItem.product_id, removedItem.qty, conn);
+    }
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn);
@@ -278,10 +330,16 @@ async function submitOrder(tenantId, orderId, actor) {
     await repo.updateOrderStatus(tenantId, orderId, 'VALIDATING_STOCK', {}, conn);
 
     const stock = await validateAndReserveStock(tenantId, order.branch_id, items, conn, orderId);
-    if (!stock.ok) {
+    const simpleStock = stock.ok ? await validateAndDecrementSimpleStock(tenantId, items, conn) : { ok: true };
+    if (!stock.ok || !simpleStock.ok) {
       await repo.recordEvent(tenantId, orderId, 'VALIDATING_STOCK', 'REJECTED_STOCK', { actorKind: 'system', reason: 'stock' }, conn);
       await repo.updateOrderStatus(tenantId, orderId, 'REJECTED_STOCK', {}, conn);
-      return { order, rejected: stock.unavailable || [] };
+      return { order, rejected: [...(stock.unavailable || []), ...(simpleStock.unavailable || [])] };
+    }
+    if (simpleStock.lowStock?.length) {
+      for (const low of simpleStock.lowStock) {
+        await enqueue(conn, { tenantId, branchId: order.branch_id, type: 'StockLow', payload: low });
+      }
     }
 
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
@@ -378,7 +436,8 @@ async function cancelOrder(tenantId, orderId, { reason } = {}, actor) {
   await withTransaction(async (conn) => {
     const fresh = await repo.lockOrder(tenantId, orderId, conn);
     if (TERMINAL.has(fresh.status)) return;
-    if (['CONFIRMED', 'QUEUED', 'PREPARING'].includes(fresh.status)) {
+    const wasConfirmed = ['CONFIRMED', 'QUEUED', 'PREPARING'].includes(fresh.status);
+    if (wasConfirmed) {
       await repo.recordEvent(tenantId, orderId, fresh.status, 'CANCEL_REQUESTED', { actorKind: actor.kind, actorId: actor.actorId, reason }, conn);
       await repo.updateOrderStatus(tenantId, orderId, 'CANCEL_REQUESTED', {}, conn);
     }
@@ -386,6 +445,10 @@ async function cancelOrder(tenantId, orderId, { reason } = {}, actor) {
     await repo.updateOrderStatus(tenantId, orderId, 'CANCELLED', { cancelled_at: 'now', cancel_reason: reason ?? null }, conn);
     await conn.query(`DELETE FROM kitchen_tickets WHERE tenant_id = :tenantId AND order_id = :orderId`, { tenantId, orderId });
     await releaseStockFor(tenantId, orderId, conn);
+    // Stock simple: sólo se descontó si el pedido llegó a confirmarse
+    // (submitOrder / staff-amend) — restaurarlo para un DRAFT nunca
+    // decrementado inflaría el stock de la nada.
+    if (wasConfirmed) await restoreSimpleStockFor(tenantId, orderId, conn);
     if (fresh.session_id) await repo.recomputeSessionTotal(tenantId, fresh.session_id, conn);
     await enqueue(conn, { tenantId, branchId: fresh.branch_id, type: 'OrderCancelled', payload: { orderId, reason } });
   });

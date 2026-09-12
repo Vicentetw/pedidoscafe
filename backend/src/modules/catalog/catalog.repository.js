@@ -110,7 +110,8 @@ async function categoryHasProducts(tenantId, id, conn = pool) {
 
 // ------------------------------------------------------------- productos
 const PRODUCT_COLS = `id, tenant_id, category_id, code, name, description, base_price, currency,
-  image_url, prep_minutes, requires_age_verification, is_active, sort_order`;
+  image_url, prep_minutes, requires_age_verification, is_active, sort_order,
+  track_stock, stock_qty, stock_min`;
 
 async function listProducts(tenantId, { categoryId } = {}, conn = pool) {
   const [rows] = await conn.query(
@@ -139,14 +140,18 @@ async function findProductByCode(tenantId, code, conn = pool) {
 async function createProduct(tenantId, d, actor, conn = pool) {
   const [r] = await conn.query(
     `INSERT INTO products (tenant_id, category_id, code, name, description, base_price, currency,
-       image_url, prep_minutes, requires_age_verification, is_active, sort_order, created_by, updated_by)
+       image_url, prep_minutes, requires_age_verification, is_active, sort_order,
+       track_stock, stock_qty, stock_min, created_by, updated_by)
      VALUES (:tenantId, :categoryId, :code, :name, :description, :basePrice, :currency,
-       :imageUrl, :prepMinutes, :ageVer, :isActive, :sortOrder, :actor, :actor)`,
+       :imageUrl, :prepMinutes, :ageVer, :isActive, :sortOrder,
+       :trackStock, :stockQty, :stockMin, :actor, :actor)`,
     {
       tenantId, categoryId: d.categoryId, code: d.code, name: d.name, description: d.description ?? null,
       basePrice: d.basePrice, currency: d.currency ?? 'ARS', imageUrl: d.imageUrl ?? null,
       prepMinutes: d.prepMinutes ?? 0, ageVer: d.requiresAgeVerification ? 1 : 0,
-      isActive: d.isActive === false ? 0 : 1, sortOrder: d.sortOrder ?? 0, actor: actor ?? null,
+      isActive: d.isActive === false ? 0 : 1, sortOrder: d.sortOrder ?? 0,
+      trackStock: d.trackStock ? 1 : 0, stockQty: d.stockQty ?? null, stockMin: d.stockMin ?? null,
+      actor: actor ?? null,
     }
   );
   return r.insertId;
@@ -159,11 +164,40 @@ async function updateProduct(tenantId, id, patch, actor, conn = pool) {
   const map = {
     categoryId: 'category_id', name: 'name', description: 'description', currency: 'currency',
     imageUrl: 'image_url', prepMinutes: 'prep_minutes', sortOrder: 'sort_order',
+    stockQty: 'stock_qty', stockMin: 'stock_min',
   };
   for (const [k, col] of Object.entries(map)) if (patch[k] !== undefined) { f.push(`${col} = :${k}`); p[k] = patch[k]; }
   if (patch.requiresAgeVerification !== undefined) { f.push('requires_age_verification = :ageVer'); p.ageVer = patch.requiresAgeVerification ? 1 : 0; }
   if (patch.isActive !== undefined) { f.push('is_active = :isActive'); p.isActive = patch.isActive ? 1 : 0; }
+  if (patch.trackStock !== undefined) { f.push('track_stock = :trackStock'); p.trackStock = patch.trackStock ? 1 : 0; }
   await conn.query(`UPDATE products SET ${f.join(', ')} WHERE tenant_id = :tenantId AND id = :id`, p);
+}
+// Decremento/restitución ATÓMICOS del stock simple — el WHERE con
+// stock_qty >= :qty hace de guarda de carrera sin necesitar lockear la
+// fila a mano: si dos confirmaciones concurrentes se pisan, sólo una
+// gana (affectedRows lo delata). Al llegar a 0 el producto deja de
+// aparecer/poder pedirse (mismo chequeo que ya usa todo lo demás).
+async function decrementStock(tenantId, productId, qty, conn = pool) {
+  const [r] = await conn.query(
+    `UPDATE products SET stock_qty = stock_qty - :qty
+      WHERE tenant_id = :tenantId AND id = :productId AND track_stock = 1 AND stock_qty >= :qty`,
+    { tenantId, productId, qty }
+  );
+  return r.affectedRows > 0;
+}
+async function restoreStock(tenantId, productId, qty, conn = pool) {
+  await conn.query(
+    `UPDATE products SET stock_qty = stock_qty + :qty
+      WHERE tenant_id = :tenantId AND id = :productId AND track_stock = 1 AND stock_qty IS NOT NULL`,
+    { tenantId, productId, qty }
+  );
+}
+async function findStockInfo(tenantId, productId, conn = pool) {
+  const [[row]] = await conn.query(
+    `SELECT track_stock, stock_qty, stock_min, name FROM products WHERE tenant_id = :tenantId AND id = :productId`,
+    { tenantId, productId }
+  );
+  return row || null;
 }
 async function updateProductBasePrice(tenantId, id, basePrice, actor, conn = pool) {
   await conn.query(
@@ -344,6 +378,7 @@ async function buildPublicMenu(tenantId, branchId, conn = pool) {
   const [prods] = await conn.query(
     `SELECT p.id, p.category_id, p.code, p.name, p.description, p.base_price, p.currency,
             p.image_url, p.prep_minutes, p.requires_age_verification, p.sort_order,
+            p.track_stock, p.stock_qty,
             o.price AS override_price, o.is_available AS override_available
        FROM products p
        JOIN menu_categories c ON c.id = p.category_id AND c.deleted_at IS NULL AND c.status = 'active'
@@ -416,6 +451,7 @@ module.exports = {
   listMenus, findMenu, findMenuByCode, createMenu, updateMenu, softDeleteMenu,
   listCategories, findCategory, findCategoryByCode, createCategory, updateCategory, softDeleteCategory, categoryHasProducts,
   listProducts, findProduct, findProductByCode, createProduct, updateProduct, updateProductBasePrice, softDeleteProduct,
+  decrementStock, restoreStock, findStockInfo,
   upsertBranchOverride, listBranchOverrides,
   listVariants, findVariantByCode, createVariant, deleteVariant,
   listModifierGroups, findModifierGroupByCode, createModifierGroup, addModifier,

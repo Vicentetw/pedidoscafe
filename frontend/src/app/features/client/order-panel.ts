@@ -88,6 +88,7 @@ const STATUS_BADGE: Record<string, string> = {
       </div>
       @if (menuLoading()) { <p class="muted">Cargando…</p> }
       @if (cats().length) {
+        <input class="search" placeholder="🔎 Buscar en el menú…" [(ngModel)]="search" />
         <div class="cat-scroller">
           <button class="cat-chip" [class.active]="activeCat() === null" (click)="activeCat.set(null)">Todos</button>
           @for (cat of cats(); track cat.code) {
@@ -178,6 +179,7 @@ const STATUS_BADGE: Record<string, string> = {
       background: var(--surface-2); border-color: transparent; font-size: 1rem; color: var(--muted);
     }
     .view-toggle button.active { background: var(--primary-soft); color: var(--primary-hover); }
+    .search { margin-bottom: var(--space-2); }
 
     .cat-scroller {
       display: flex; gap: 8px; overflow-x: auto; padding: 2px 0 6px; margin-bottom: var(--space-2);
@@ -271,9 +273,19 @@ export class OrderPanel implements OnInit {
   // scroll horizontal) — pedido explícito de diseño: null = "Todos".
   readonly viewMode = signal<'grid' | 'list'>('grid');
   readonly activeCat = signal<string | null>(null);
+  search = '';
   visibleCats() {
     const c = this.activeCat();
-    return c ? this.cats().filter((x) => x.code === c) : this.cats();
+    const byCat = c ? this.cats().filter((x) => x.code === c) : this.cats();
+    const q = this.search.trim().toLowerCase();
+    if (!q) return byCat;
+    // Buscar filtra los PRODUCTOS dentro de cada categoría visible (no
+    // sólo el nombre de la categoría) y se salta la categoría entera si
+    // queda vacía — así "medialuna" encuentra el producto sin que haga
+    // falta elegir la categoría correcta primero.
+    return byCat
+      .map((cat) => ({ ...cat, products: cat.products.filter((p) => p.name.toLowerCase().includes(q)) }))
+      .filter((cat) => cat.products.length);
   }
 
   badgeClass(status: string) { return STATUS_BADGE[status] ?? 'badge'; }
