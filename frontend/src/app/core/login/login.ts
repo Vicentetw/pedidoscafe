@@ -10,7 +10,7 @@ import { AuthService } from '../auth';
     <div class="wrap">
       <div class="card">
         <p class="eyebrow">Bienvenido a</p>
-        <h1>pedidoscofee</h1>
+        <h1>Restia Pedidos</h1>
         <p class="muted intro">Ingresá con tu cuenta para continuar</p>
 
         <label for="email">Email</label>

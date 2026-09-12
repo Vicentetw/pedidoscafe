@@ -1,4 +1,4 @@
-import { Component, computed, inject, signal } from '@angular/core';
+import { Component, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet, ActivatedRoute, Router, NavigationStart } from '@angular/router';
 import { AuthService } from '../auth';
 import { CurrentUserService } from '../current-user';
@@ -20,7 +20,7 @@ interface NavItem {
     <div class="layout" [class.collapsed]="collapsed()">
       <header class="topbar">
         <button class="icon-btn" (click)="drawerOpen.set(true)" aria-label="Abrir menú">☰</button>
-        <span class="brand">pedidoscofee</span>
+        <span class="brand">Restia Pedidos</span>
       </header>
 
       @if (drawerOpen()) {
@@ -29,7 +29,7 @@ interface NavItem {
 
       <aside class="side" [class.open]="drawerOpen()">
         <div class="side-head">
-          <span class="brand">pedidoscofee</span>
+          <span class="brand">Restia Pedidos</span>
           <button class="icon-btn close-btn" (click)="drawerOpen.set(false)" aria-label="Cerrar menú">✕</button>
           <button class="icon-btn collapse-btn" (click)="collapsed.set(!collapsed())" aria-label="Contraer menú">☰</button>
         </div>
@@ -42,6 +42,11 @@ interface NavItem {
               <span class="warn">⚠ Elegí una empresa</span>
             }
           </a>
+        } @else if (profile()?.tenantName; as tn) {
+          <div class="tenant-chip static">
+            <span class="muted small">Empresa</span>
+            <strong>{{ tn }}</strong>
+          </div>
         }
         <nav>
           @for (item of visibleNav(); track item.link) {
@@ -88,6 +93,7 @@ interface NavItem {
         text-decoration: none; color: var(--text); font-size: 0.85rem;
       }
       .tenant-chip:hover { background: var(--primary-soft); }
+      .tenant-chip.static:hover { background: var(--surface-2); }
       .tenant-chip strong { color: var(--primary-hover); }
       .tenant-chip .warn { color: var(--warning); font-weight: 600; }
 
@@ -218,6 +224,12 @@ export class Shell {
   constructor() {
     // Cerrar el panel mobile si el usuario navega por otro medio (atrás del navegador, etc.)
     this.router.events.subscribe((e) => { if (e instanceof NavigationStart) this.drawerOpen.set(false); });
+    // Título de la pestaña: nombre de la empresa cuando hay una (la propia
+    // del usuario, o la que eligió el superadmin), Restia Pedidos si no.
+    effect(() => {
+      const name = this.profile()?.tenantName || this.selectedTenant()?.name;
+      document.title = name ? `${name} · Restia Pedidos` : 'Restia Pedidos';
+    });
   }
 
   signOut() {

@@ -7,8 +7,8 @@ import type { CapacitorConfig } from '@capacitor/cli';
 // environment.mobile.ts con una URL de backend absoluta — el APK no sirve
 // nada por red propia, así que backendUrl no puede quedar relativo.
 const config: CapacitorConfig = {
-  appId: 'com.pedidoscofee.app',
-  appName: 'pedidoscofee',
+  appId: 'com.pedidoscofee.app', // identidad del paquete — no se toca al rebrandear el nombre visible
+  appName: 'Restia Pedidos',
   webDir: 'dist/pedidoscofee/browser',
 };
 

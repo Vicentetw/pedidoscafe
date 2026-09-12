@@ -13,9 +13,11 @@ const { writeAudit } = require('../../audit/audit');
 async function getMe(req) {
   if (!req.appUser) throw new NotFoundError('No hay un perfil asociado a tu sesión.');
   let tenantSlug = null;
+  let tenantName = null;
   if (req.appUser.tenantId) {
-    const [[t]] = await pool.query(`SELECT slug FROM tenants WHERE id = :id`, { id: req.appUser.tenantId });
+    const [[t]] = await pool.query(`SELECT slug, name FROM tenants WHERE id = :id`, { id: req.appUser.tenantId });
     tenantSlug = t ? t.slug : null;
+    tenantName = t ? t.name : null;
   }
   return {
     id: req.appUser.id,
@@ -23,6 +25,7 @@ async function getMe(req) {
     displayName: req.appUser.displayName,
     tenantId: req.appUser.tenantId,
     tenantSlug,
+    tenantName,
     defaultBranchId: req.appUser.defaultBranchId,
     isSuperadmin: req.appUser.isSuperadmin,
     permissions: [...req.appUser.permissions].sort(),

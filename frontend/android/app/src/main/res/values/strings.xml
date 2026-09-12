@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">pedidoscofee</string>
-    <string name="title_activity_main">pedidoscofee</string>
+    <string name="app_name">Restia Pedidos</string>
+    <string name="title_activity_main">Restia Pedidos</string>
     <string name="package_name">com.pedidoscofee.app</string>
     <string name="custom_url_scheme">com.pedidoscofee.app</string>
 </resources>

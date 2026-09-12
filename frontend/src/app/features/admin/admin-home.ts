@@ -17,6 +17,9 @@ import { CurrentUserService } from '../../core/current-user';
         } @else {
           <p class="warn">Todavía no elegiste una empresa — <a class="link" routerLink="/admin/empresas">elegí una acá</a> para poder ver o editar sus datos.</p>
         }
+      } @else if (profile()?.tenantName; as tn) {
+        <p class="welcome">Bienvenido/a a <strong>{{ tn }}</strong></p>
+        <p class="muted">{{ profile()?.permissions?.length }} permisos habilitados en tu cuenta.</p>
       } @else {
         <p class="muted">{{ profile()?.permissions?.length }} permisos habilitados en tu cuenta.</p>
       }
@@ -31,6 +34,8 @@ import { CurrentUserService } from '../../core/current-user';
   `,
   styles: [`
     .warn { color: var(--warning); }
+    .welcome { font-size: 1.05rem; margin: 0 0 4px; }
+    .welcome strong { color: var(--primary-hover); }
     .quick { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: var(--space-3); margin-top: var(--space-4); }
     .qcard {
       display: flex; flex-direction: column; align-items: center; gap: 6px;

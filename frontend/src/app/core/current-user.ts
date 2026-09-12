@@ -11,6 +11,7 @@ export interface CurrentUserProfile {
   email: string;
   displayName: string | null;
   tenantId: number | null;
+  tenantName: string | null;
   defaultBranchId: number | null;
   isSuperadmin: boolean;
   permissions: string[];
