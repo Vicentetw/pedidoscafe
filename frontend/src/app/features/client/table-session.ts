@@ -3,17 +3,18 @@ import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, RouterLink } from '@angular/router';
 import { TableSessionService } from '../../core/table-session';
 import { OrderPanel } from './order-panel';
+import { LoadingBarista } from '../../core/loading-barista/loading-barista';
 
 // Superficie del comensal DESDE LA MESA — /t/:token (el token del QR).
 // 1) resuelve el QR  2) el comensal pone su nombre y se une  3) ve la
 // sesión (quiénes están, modo de pedido) + el panel de pedido.
 @Component({
   selector: 'app-table-session',
-  imports: [FormsModule, RouterLink, OrderPanel],
+  imports: [FormsModule, RouterLink, OrderPanel, LoadingBarista],
   template: `
     <div class="wrap">
       @if (loading()) {
-        <div class="center-msg"><p class="muted">Un momento…</p></div>
+        <app-loading-barista />
       } @else if (error()) {
         <div class="center-msg">
           <div class="card"><p>{{ error() }}</p></div>
