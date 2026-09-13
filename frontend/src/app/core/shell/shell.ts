@@ -1,7 +1,8 @@
-import { Component, computed, effect, inject, signal } from '@angular/core';
+import { Component, OnDestroy, computed, effect, inject, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive, RouterOutlet, ActivatedRoute, Router, NavigationStart } from '@angular/router';
 import { AuthService } from '../auth';
 import { CurrentUserService } from '../current-user';
+import { Api } from '../api';
 
 interface NavItem {
   label: string;
@@ -61,6 +62,20 @@ interface NavItem {
 
       <main><router-outlet /></main>
     </div>
+
+    @if (newOrders(); as n) {
+      <div class="modal-scrim" (click)="dismissNewOrders()">
+        <div class="modal-card" (click)="$event.stopPropagation()">
+          <p class="modal-icon">🔔</p>
+          <h3>{{ n === 1 ? 'Hay un pedido nuevo' : n + ' pedidos nuevos' }}</h3>
+          <p class="muted">Llegaron mientras no estabas mirando esta pantalla.</p>
+          <div class="modal-actions">
+            <button class="primary" (click)="goToOrders()">Ver pedidos</button>
+            <button (click)="dismissNewOrders()">Cerrar</button>
+          </div>
+        </div>
+      </div>
+    }
   `,
   styles: [
     `
@@ -172,19 +187,46 @@ interface NavItem {
 
         main { padding: var(--space-4); padding-bottom: calc(var(--space-4) + env(safe-area-inset-bottom)); }
       }
+
+      .modal-scrim {
+        position: fixed; inset: 0; background: rgba(20, 16, 12, 0.5);
+        display: grid; place-items: center; z-index: 50; padding: var(--space-4);
+      }
+      .modal-card {
+        background: var(--surface); border-radius: var(--radius); padding: var(--space-5);
+        max-width: 340px; width: 100%; text-align: center; box-shadow: var(--shadow-2);
+      }
+      .modal-icon { font-size: 2.2rem; margin: 0 0 4px; }
+      .modal-card h3 { margin: 0 0 6px; }
+      .modal-actions { display: flex; gap: 8px; margin-top: var(--space-4); }
+      .modal-actions button { flex: 1; }
     `,
   ],
 })
-export class Shell {
+export class Shell implements OnDestroy {
   private readonly auth = inject(AuthService);
   private readonly currentUser = inject(CurrentUserService);
   private readonly route = inject(ActivatedRoute);
   private readonly router = inject(Router);
+  private readonly api = inject(Api);
 
   readonly collapsed = signal(false);
   readonly drawerOpen = signal(false);
   readonly profile = this.currentUser.profile;
   readonly selectedTenant = this.currentUser.selectedTenant;
+
+  // Aviso de "hay pedidos nuevos" — pedido en la aceptación: "una
+  // notificación modal cuando hay pedidos y lo lleve a pedidos". Sin SSE
+  // para staff todavía (exige Firebase, ver kitchen.service.js/staff-kds.ts
+  // — el KDS mismo ya resuelve esto con polling corto), así que este aviso
+  // GLOBAL (cualquier pantalla de staff/admin, no sólo Cocina) usa el
+  // mismo patrón: sondea cada 20s cuántos pedidos están QUEUED en la
+  // sucursal del usuario y, si el número SUBIÓ desde la última vuelta,
+  // muestra el modal — nunca en la primera carga (sería un aviso falso de
+  // "nuevo" por algo que ya estaba ahí de antes).
+  readonly newOrders = signal<number | null>(null);
+  private lastOrderCount: number | null = null;
+  private orderPoll?: ReturnType<typeof setInterval>;
 
   private readonly surface = (this.route.snapshot.data['surface'] as 'staff' | 'admin') ?? 'admin';
 
@@ -233,6 +275,38 @@ export class Shell {
       const name = this.profile()?.tenantName || this.selectedTenant()?.name;
       document.title = name ? `${name} · Restia Pedidos` : 'Restia Pedidos';
     });
+    // Arranca una sola vez, apenas se conoce la sucursal por defecto del
+    // usuario (superadmin sin empresa elegida, o un owner sin sucursal
+    // fija, simplemente no la tienen — se queda sin aviso, no rompe nada).
+    effect(() => {
+      const branchId = this.profile()?.defaultBranchId;
+      if (branchId && !this.orderPoll && this.currentUser.hasPermission('orders:view')) {
+        this.startOrderWatch(branchId);
+      }
+    });
+  }
+
+  ngOnDestroy() { clearInterval(this.orderPoll); }
+
+  private startOrderWatch(branchId: number) {
+    const check = () => {
+      this.api.get<{ data: unknown[] }>(`/api/orders?branchId=${branchId}&status=QUEUED`).subscribe({
+        next: (r) => {
+          const count = r.data.length;
+          if (this.lastOrderCount != null && count > this.lastOrderCount) this.newOrders.set(count);
+          this.lastOrderCount = count;
+        },
+        error: () => { /* silencioso — esto es un aviso de cortesía, no algo crítico */ },
+      });
+    };
+    check();
+    this.orderPoll = setInterval(check, 20000);
+  }
+
+  dismissNewOrders() { this.newOrders.set(null); }
+  goToOrders() {
+    this.newOrders.set(null);
+    this.router.navigateByUrl(this.surface === 'staff' ? '/staff/cocina' : '/admin/mesas');
   }
 
   signOut() {
