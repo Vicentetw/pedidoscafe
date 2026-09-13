@@ -544,6 +544,13 @@ module.exports = {
   getSessionBalance, chargeSession, splitEqual, chargeOrder,
   processMpWebhookNotification, checkPendingMpPayment, refundPayment,
   getPayment, listPayments, getReconciliation,
+  // Re-sincroniza el status de la mesa contra su saldo real — lo usa
+  // orders.service.js (require diferido, evita el ciclo con
+  // payments.service.js) después de que un agregado/quitado de ítem
+  // post-confirmación mueve total_amount, para que un saldo que quedó en
+  // $0 no deje la mesa "atascada" en un status que no puede ir a CLOSED
+  // directo (bug real de la aceptación).
+  syncSessionStatus,
   // exportado para tests
   _mapMpStatus: mapMpStatus,
 };

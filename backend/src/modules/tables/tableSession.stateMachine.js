@@ -8,10 +8,21 @@ const { DomainError } = require('../../errors');
 
 const TRANSITIONS = {
   OPEN: ['ORDERING', 'BILL_REQUESTED', 'ABANDONED', 'FORCE_CLOSED', 'CLOSED'],
-  ORDERING: ['SERVING', 'BILL_REQUESTED', 'OPEN', 'ABANDONED', 'FORCE_CLOSED'],
-  SERVING: ['ORDERING', 'BILL_REQUESTED', 'FORCE_CLOSED'],
-  BILL_REQUESTED: ['PARTIALLY_PAID', 'PAID', 'SERVING', 'FORCE_CLOSED'],
-  PARTIALLY_PAID: ['PARTIALLY_PAID', 'PAID', 'FORCE_CLOSED'],
+  // ORDERING/SERVING/BILL_REQUESTED/PARTIALLY_PAID -> CLOSED: bug real
+  // encontrado en la aceptación — si un pedido se cancela o se devuelve
+  // DESPUÉS de que la mesa ya había avanzado de estado, total_amount y
+  // paid_amount pueden volver a quedar iguales (a veces en 0 y 0) sin que
+  // el status vuelva solo a OPEN/PAID (nada lo empuja para atrás). La
+  // mesa quedaba con saldo saldado de verdad pero sin ningún camino
+  // válido a CLOSED — "no se puede cerrar la mesa" aunque estuviera en
+  // $0. closeSession() YA exige paid_amount === total_amount ANTES de
+  // intentar esta transición, así que agregarla acá no afloja esa regla:
+  // sólo repara los casos donde la plata está saldada pero la etiqueta
+  // de estado quedó atrás.
+  ORDERING: ['SERVING', 'BILL_REQUESTED', 'OPEN', 'ABANDONED', 'FORCE_CLOSED', 'CLOSED'],
+  SERVING: ['ORDERING', 'BILL_REQUESTED', 'FORCE_CLOSED', 'CLOSED'],
+  BILL_REQUESTED: ['PARTIALLY_PAID', 'PAID', 'SERVING', 'FORCE_CLOSED', 'CLOSED'],
+  PARTIALLY_PAID: ['PARTIALLY_PAID', 'PAID', 'FORCE_CLOSED', 'CLOSED'],
   // PAID -> PARTIALLY_PAID: caso borde de una devolución parcial procesada
   // ANTES de cerrar la mesa (Fase 6). No es el camino normal.
   PAID: ['CLOSED', 'PARTIALLY_PAID'],

@@ -55,6 +55,17 @@ async function restoreSimpleStockFor(tenantId, orderId, conn) {
     if (info && info.track_stock) await catalogRepo.restoreStock(tenantId, it.product_id, it.qty, conn);
   }
 }
+// require diferido (evita el ciclo con payments.service.js, que ya
+// importa orders.repository.js a nivel de archivo). Bug real de la
+// aceptación: agregar/sacar un ítem de un pedido confirmado, o
+// cancelarlo, mueve total_amount pero nunca re-sincronizaba el status de
+// la mesa contra el saldo real — una mesa que quedaba saldada de nuevo
+// (a veces en $0 y $0) podía quedar "atascada" en SERVING/PARTIALLY_PAID,
+// un status sin camino directo a CLOSED (ver tableSession.stateMachine.js).
+async function resyncSessionStatus(tenantId, sessionId, conn) {
+  const paymentsService = require('../payments/payments.service');
+  await paymentsService.syncSessionStatus(tenantId, sessionId, conn);
+}
 // ---------------------------------------------------------------------------
 
 async function resolvePricedItem(tenantId, branchId, input, conn = pool) {
@@ -237,7 +248,10 @@ async function addItem(tenantId, orderId, input, actor) {
     }
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn); // no-op si no hay promo aplicada
-    if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+    if (staffAmend && order.session_id) {
+      await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+      await resyncSessionStatus(tenantId, order.session_id, conn);
+    }
     if (staffAmend) {
       // Ticket de seguimiento SÓLO con el ítem nuevo — el original ya
       // salió, esto es lo único que cocina todavía no vio. No reserva
@@ -273,7 +287,10 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn);
-    if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+    if (staffAmend && order.session_id) {
+      await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+      await resyncSessionStatus(tenantId, order.session_id, conn);
+    }
   });
   return getOrder(tenantId, orderId);
 }
@@ -299,7 +316,10 @@ async function removeItem(tenantId, orderId, itemId, actor) {
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
     await promotionsService.recomputeDiscountForOrder(tenantId, orderId, items, conn);
-    if (staffAmend && order.session_id) await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+    if (staffAmend && order.session_id) {
+      await repo.recomputeSessionTotal(tenantId, order.session_id, conn);
+      await resyncSessionStatus(tenantId, order.session_id, conn);
+    }
     // Nota honesta: esto NO libera la reserva de stock de ingredientes de
     // ese ítem (Fase 5) — reconciliar eso a nivel de un solo ítem no
     // existe hoy (las reservas se trackean por PEDIDO, no por ítem). Si
@@ -449,7 +469,10 @@ async function cancelOrder(tenantId, orderId, { reason } = {}, actor) {
     // (submitOrder / staff-amend) — restaurarlo para un DRAFT nunca
     // decrementado inflaría el stock de la nada.
     if (wasConfirmed) await restoreSimpleStockFor(tenantId, orderId, conn);
-    if (fresh.session_id) await repo.recomputeSessionTotal(tenantId, fresh.session_id, conn);
+    if (fresh.session_id) {
+      await repo.recomputeSessionTotal(tenantId, fresh.session_id, conn);
+      await resyncSessionStatus(tenantId, fresh.session_id, conn);
+    }
     await enqueue(conn, { tenantId, branchId: fresh.branch_id, type: 'OrderCancelled', payload: { orderId, reason } });
   });
   await writeAudit({ req: actor.req, tenantId, branchId: order.branch_id, entityType: 'order', entityId: orderId, action: 'cancel', before: { status: order.status }, reason });

@@ -114,3 +114,29 @@ test('una vez PREPARING, ni siquiera con orders:amend_paid se puede tocar (cance
     (err) => { assert.equal(err.status, 409); assert.equal(err.code, 'ORDER_NOT_EDITABLE'); return true; }
   );
 });
+
+// Bug real reportado en la aceptación: "no podía cerrar la mesa aunque
+// el saldo estaba en $0". Causa real: sacar el único ítem de un pedido
+// confirmado deja total_amount=0 y paid_amount=0 (nunca se pagó nada) —
+// syncSessionStatus no tiene a dónde sincronizar un saldo "0 y 0" (ni
+// PAID ni PARTIALLY_PAID aplican), así que el status de la mesa se queda
+// en SERVING — un status que la máquina de estados NO dejaba pasar
+// directo a CLOSED, aunque closeSession ya había confirmado que la plata
+// está saldada. Cubre el fix en tableSession.stateMachine.js.
+test('sacar el único ítem deja la mesa en $0/$0 — igual se puede cerrar (bug real)', async () => {
+  const { orderId, sessionId } = await freshOrder();
+  const [[sess1]] = await db.query('SELECT status FROM table_sessions WHERE id = ?', [sessionId]);
+  assert.equal(sess1.status, 'SERVING');
+
+  const order = await orderSvc.getOrder(T, orderId);
+  const onlyItem = order.items[0];
+  await orderSvc.removeItem(T, orderId, onlyItem.id, staffWithPerm);
+
+  const [[sess2]] = await db.query('SELECT status, total_amount, paid_amount FROM table_sessions WHERE id = ?', [sessionId]);
+  assert.equal(sess2.total_amount, '0.00');
+  assert.equal(sess2.paid_amount, '0.00');
+  // Antes del fix, sess2.status quedaba en 'SERVING' y esto tiraba
+  // INVALID_SESSION_TRANSITION — ahora cierra sin problema.
+  const closed = await tablesSvc.closeSession(T, sessionId, {});
+  assert.equal(closed.status, 'CLOSED');
+});
