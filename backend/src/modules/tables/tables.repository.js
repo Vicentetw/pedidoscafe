@@ -266,6 +266,20 @@ async function removeParticipant(tenantId, sessionId, id, conn = pool) {
   );
   return r.affectedRows > 0;
 }
+// Estado vigente que un table_session_token no puede saber por sí solo: el
+// JWT sigue firmado aunque la mesa se haya cerrado o hayan sacado a la persona.
+// null = la sesión no existe. participantActive = false si no está o ya se fue.
+async function findGuestAccess(tenantId, sessionId, participantId, conn = pool) {
+  const [[row]] = await conn.query(
+    `SELECT s.status, (p.id IS NOT NULL AND p.left_at IS NULL) AS participant_active
+       FROM table_sessions s
+       LEFT JOIN session_participants p
+         ON p.tenant_id = s.tenant_id AND p.session_id = s.id AND p.id = :participantId
+      WHERE s.tenant_id = :tenantId AND s.id = :sessionId`,
+    { tenantId, sessionId, participantId }
+  );
+  return row ? { status: row.status, participantActive: !!row.participant_active } : null;
+}
 
 module.exports = {
   newToken, lockTableRow,
@@ -274,5 +288,5 @@ module.exports = {
   findActiveSessionByTable, findSessionById, lockSession, setSessionAmounts, findSessionByPublicId, createSession, setSessionStatus,
   assignWaiter, touchSession, listOpenSessions,
   addParticipant, listParticipants, findParticipant, findParticipantByPublicId, removeParticipant,
-  findActiveParticipantByName,
+  findActiveParticipantByName, findGuestAccess,
 };

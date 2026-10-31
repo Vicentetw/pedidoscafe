@@ -16,6 +16,8 @@ const stockService = require('../inventory/stock.service');
 const catalogRepo = require('../catalog/catalog.repository');
 const crmRepo = require('../crm/crm.repository');
 const promotionsService = require('../promotions/promotions.service');
+const tablesRepo = require('../tables/tables.repository');
+const { TERMINAL: SESSION_TERMINAL } = require('../tables/tableSession.stateMachine');
 async function validateAndReserveStock(tenantId, branchId, items, conn, orderId) {
   return stockService.reserveForOrder(tenantId, branchId, orderId, items, conn);
 }
@@ -67,6 +69,19 @@ async function resyncSessionStatus(tenantId, sessionId, conn) {
   await paymentsService.syncSessionStatus(tenantId, sessionId, conn);
 }
 // ---------------------------------------------------------------------------
+
+// Una mesa terminada no acepta más pedidos: quedarían sin cobrar, con la mesa
+// ya libre para otra gente. La superficie del comensal ya corta antes
+// (tableSessionMiddleware); esto cubre además a staff y a la carrera con el
+// cierre, por eso lockea la sesión dentro de la transacción de la escritura.
+function assertSessionOpen(session) {
+  if (session && SESSION_TERMINAL.has(session.status)) {
+    throw new ConflictError('Esta mesa ya se cerró; no se pueden cargar más pedidos.', { code: 'SESSION_CLOSED' });
+  }
+}
+async function lockOpenSession(tenantId, sessionId, conn) {
+  if (sessionId) assertSessionOpen(await tablesRepo.lockSession(tenantId, sessionId, conn));
+}
 
 async function resolvePricedItem(tenantId, branchId, input, conn = pool) {
   const [[product]] = await conn.query(
@@ -144,6 +159,7 @@ function sumTotals(items) {
 
 // ============================================================ crear / editar
 async function createOrder(tenantId, { branchId, sessionId = null, participantId = null, customerId = null, channel, note }, createdBy) {
+  if (sessionId) assertSessionOpen(await tablesRepo.findSessionById(tenantId, sessionId));
   const { id, publicId } = await repo.createOrder(tenantId, {
     branchId, sessionId, participantId, customerId, channel, note,
     createdByKind: createdBy.kind, createdBy: createdBy.actorId ?? null,
@@ -230,6 +246,7 @@ async function addItem(tenantId, orderId, input, actor) {
   const priced = await resolvePricedItem(tenantId, order.branch_id, input, pool);
 
   await withTransaction(async (conn) => {
+    await lockOpenSession(tenantId, order.session_id, conn);
     const itemId = await repo.addItem(tenantId, orderId, {
       ...priced,
       participantId: order.participant_id,
@@ -283,6 +300,7 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
   const q = Math.max(1, Math.trunc(qty));
   const unitCents = toCents(item.unit_price) + toCents(item.modifiers_total);
   await withTransaction(async (conn) => {
+    await lockOpenSession(tenantId, order.session_id, conn);
     await repo.updateItemQty(tenantId, orderId, itemId, q, item.unit_price, item.modifiers_total, fromCents(unitCents * q), conn);
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
@@ -302,6 +320,7 @@ async function removeItem(tenantId, orderId, itemId, actor) {
   const staffAmend = !['DRAFT', 'REJECTED_STOCK'].includes(order.status);
   const removedItem = staffAmend ? await repo.findItem(tenantId, orderId, itemId) : null;
   await withTransaction(async (conn) => {
+    await lockOpenSession(tenantId, order.session_id, conn);
     // ON DELETE CASCADE se lleva puesto el kitchen_ticket_item si ya
     // había uno (sólo pasa en staffAmend) — seguro porque assertEditable
     // sólo deja tocar CONFIRMED/QUEUED, nunca algo ya en PREPARING.
@@ -334,12 +353,16 @@ async function removeItem(tenantId, orderId, itemId, actor) {
 // ============================================================ submit
 async function submitOrder(tenantId, orderId, actor) {
   const result = await withTransaction(async (conn) => {
+    // Sesión antes que pedido: el mismo orden de locks que chargeSession.
+    const current = await repo.findOrder(tenantId, orderId, conn);
+    const session = current?.session_id ? await tablesRepo.lockSession(tenantId, current.session_id, conn) : null;
     const order = await repo.lockOrder(tenantId, orderId, conn);
     if (!order) throw new NotFoundError('Ese pedido no existe.');
     if (order.status === 'CONFIRMED' || order.status === 'QUEUED') return { order, alreadyConfirmed: true };
     if (!['DRAFT', 'REJECTED_STOCK'].includes(order.status)) {
       throw new ConflictError('Este pedido ya no se puede enviar.', { code: 'ORDER_NOT_SUBMITTABLE' });
     }
+    assertSessionOpen(session);
     const items = await repo.listItems(tenantId, orderId, conn);
     if (!items.length) throw new ValidationError('El pedido no tiene ningún ítem.');
 

@@ -1,6 +1,8 @@
 const jwt = require('jsonwebtoken');
 const { config } = require('../config');
-const { UnauthorizedError } = require('../errors');
+const { UnauthorizedError, NotFoundError, ConflictError } = require('../errors');
+const tablesRepo = require('../modules/tables/tables.repository');
+const { TERMINAL } = require('../modules/tables/tableSession.stateMachine');
 
 // table_session_token — el "pase" del comensal. Lo EMITE el backend tras
 // validar el QR (Fase 3). El comensal no tiene app_user: su scope
@@ -55,14 +57,29 @@ function verifyTableSessionToken(token) {
 // Middleware para la superficie del comensal. El token viene por
 // `Authorization: Bearer`; se acepta además `?access_token=` SÓLO porque
 // EventSource (SSE) no permite mandar headers.
-function tableSessionMiddleware(req, res, next) {
+//
+// Un JWT válido no alcanza: se revalida contra la base, porque el token no se
+// revoca al cerrar la mesa ni al sacar a alguien. A quien ya no está en la mesa
+// se le corta todo (401: el frontend limpia el token y vuelve a pedir el
+// nombre). Con la mesa terminada se corta sólo lo que escribe: lo consumido se
+// puede seguir consultando.
+async function tableSessionMiddleware(req, res, next) {
+  // /api/session/* pasa por varios routers gateados: se valida una sola vez.
+  if (req.tableSession) return next();
   const header = req.headers.authorization || '';
   const token =
     (header.startsWith('Bearer ') ? header.slice(7).trim() : null) ||
     (typeof req.query.access_token === 'string' ? req.query.access_token : null);
   if (!token) return next(new UnauthorizedError('Escaneá el código de la mesa para empezar.'));
   try {
-    req.tableSession = verifyTableSessionToken(token);
+    const scope = verifyTableSessionToken(token);
+    const access = await tablesRepo.findGuestAccess(scope.tenantId, scope.sessionId, scope.participantId);
+    if (!access) throw new NotFoundError('Tu sesión de mesa ya no existe.');
+    if (!access.participantActive) throw new UnauthorizedError('Ya no estás en esta mesa. Escaneá el código para volver a sumarte.');
+    if (TERMINAL.has(access.status) && !['GET', 'HEAD'].includes(req.method)) {
+      throw new ConflictError('Esta mesa ya se cerró. Si volviste a la mesa, escaneá el código de nuevo.', { code: 'SESSION_CLOSED' });
+    }
+    req.tableSession = scope;
     return next();
   } catch (err) {
     return next(err);

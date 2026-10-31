@@ -104,23 +104,28 @@ async function assignWaiter(tenantId, sessionId, waiterUserId, req) {
 }
 
 async function closeSession(tenantId, sessionId, req) {
-  const s = await repo.findSessionById(tenantId, sessionId);
-  if (!s) throw new NotFoundError('Esa sesión no existe.');
-  if (TERMINAL.has(s.status)) return staffSessionView(tenantId, sessionId);
-  if (Number(s.paid_amount) !== Number(s.total_amount)) {
-    throw new DomainError('No se puede cerrar la mesa: queda un saldo pendiente. Usá "cierre forzado" si corresponde.', {
-      status: 409, code: 'SESSION_HAS_BALANCE',
-      details: { total: s.total_amount, paid: s.paid_amount },
-    });
-  }
-  // La ruta operativa "normal" pasa por BILL_REQUESTED -> PAID -> CLOSED; en
-  // la Fase 3 (sin pagos) se permite OPEN -> CLOSED si el total es 0.
-  await withTransaction(async (conn) => {
-    if (s.status !== 'PAID') assertTransition(s.status, 'CLOSED');
+  // El saldo se valida con la fila lockeada: un pedido confirmándose en ese
+  // mismo momento (submitOrder lockea la misma fila) o entra antes y se ve
+  // acá como saldo, o espera y se encuentra con la mesa ya cerrada.
+  const s = await withTransaction(async (conn) => {
+    const cur = await repo.lockSession(tenantId, sessionId, conn);
+    if (!cur) throw new NotFoundError('Esa sesión no existe.');
+    if (TERMINAL.has(cur.status)) return null;
+    if (Number(cur.paid_amount) !== Number(cur.total_amount)) {
+      throw new DomainError('No se puede cerrar la mesa: queda un saldo pendiente. Usá "cierre forzado" si corresponde.', {
+        status: 409, code: 'SESSION_HAS_BALANCE',
+        details: { total: cur.total_amount, paid: cur.paid_amount },
+      });
+    }
+    // La ruta operativa "normal" pasa por BILL_REQUESTED -> PAID -> CLOSED; en
+    // la Fase 3 (sin pagos) se permite OPEN -> CLOSED si el total es 0.
+    if (cur.status !== 'PAID') assertTransition(cur.status, 'CLOSED');
     await repo.setSessionStatus(tenantId, sessionId, 'CLOSED', { closed: true }, conn);
-    await repo.setTableStatus(tenantId, s.table_id, 'FREE', null, conn);
-    await enqueue(conn, { tenantId, branchId: s.branch_id, type: 'TableSessionClosed', payload: { sessionId, reason: 'closed' } });
+    await repo.setTableStatus(tenantId, cur.table_id, 'FREE', null, conn);
+    await enqueue(conn, { tenantId, branchId: cur.branch_id, type: 'TableSessionClosed', payload: { sessionId, reason: 'closed' } });
+    return cur;
   });
+  if (!s) return staffSessionView(tenantId, sessionId);
   await writeAudit({ req, tenantId, branchId: s.branch_id, entityType: 'table_session', entityId: sessionId, action: 'close' });
   publish({ tenantId, branchId: s.branch_id, topic: 'tables', event: 'session_closed', data: { sessionId, tableId: s.table_id } });
   return staffSessionView(tenantId, sessionId);
