@@ -99,7 +99,7 @@ async function recomputeSessionTotal(tenantId, sessionId, conn = pool) {
     `UPDATE table_sessions s
         SET s.total_amount = COALESCE((
           SELECT SUM(o.total) FROM orders o
-           WHERE o.session_id = s.id
+           WHERE o.session_id = s.id AND o.tenant_id = s.tenant_id
              AND o.status IN ('CONFIRMED','QUEUED','PREPARING','READY','DELIVERED','COMPLETED')
         ), 0)
       WHERE s.tenant_id = :tenantId AND s.id = :sessionId`,

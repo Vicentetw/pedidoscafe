@@ -17,6 +17,7 @@ const catalogRepo = require('../catalog/catalog.repository');
 const crmRepo = require('../crm/crm.repository');
 const promotionsService = require('../promotions/promotions.service');
 const tablesRepo = require('../tables/tables.repository');
+const branchRepo = require('../platform/branches.repository');
 const { TERMINAL: SESSION_TERMINAL } = require('../tables/tableSession.stateMachine');
 async function validateAndReserveStock(tenantId, branchId, items, conn, orderId) {
   return stockService.reserveForOrder(tenantId, branchId, orderId, items, conn);
@@ -159,7 +160,16 @@ function sumTotals(items) {
 
 // ============================================================ crear / editar
 async function createOrder(tenantId, { branchId, sessionId = null, participantId = null, customerId = null, channel, note }, createdBy) {
-  if (sessionId) assertSessionOpen(await tablesRepo.findSessionById(tenantId, sessionId));
+  // branchId / sessionId / customerId llegan del body del staff: tienen que
+  // ser de su empresa (y la mesa, de esa sucursal), o el pedido termina
+  // colgado de datos ajenos e inflando la cuenta de otra empresa.
+  if (!(await branchRepo.findById(tenantId, branchId))) throw new ValidationError('Esa sucursal no existe en tu empresa.');
+  if (sessionId) {
+    const session = await tablesRepo.findSessionById(tenantId, sessionId);
+    if (!session || session.branch_id !== branchId) throw new ValidationError('Esa mesa no existe en esa sucursal.');
+    assertSessionOpen(session);
+  }
+  if (customerId && !(await crmRepo.findCustomer(tenantId, customerId))) throw new ValidationError('Ese cliente no existe.');
   const { id, publicId } = await repo.createOrder(tenantId, {
     branchId, sessionId, participantId, customerId, channel, note,
     createdByKind: createdBy.kind, createdBy: createdBy.actorId ?? null,
