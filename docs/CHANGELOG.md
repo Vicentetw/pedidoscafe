@@ -2,7 +2,7 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
-## 2026-11-03 — falla 2 (sin commit)
+## 2026-11-03 — `7be7f81` falla 2 (publicado)
 Aislamiento multiempresa al crear pedidos.
 - `orders.service.js` `createOrder`: 422 si la sucursal, la mesa o el cliente no son de la empresa, o si la mesa es de otra sucursal.
 - `orders.repository.js` `recomputeSessionTotal`: sólo suma pedidos de la empresa de la mesa.

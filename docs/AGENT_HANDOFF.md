@@ -1,18 +1,18 @@
 # Handoff para el próximo agente
 
-Última actualización: 2026-11-03 · commit base `74e1513` (= `origin/main`).
+Última actualización: 2026-11-03 · commit base `7be7f81` (último cambio de código).
 
 ## Estado
 - Producción arriba: backend `https://pedidoscafe.onrender.com`, frontend `restiapedidos.web.app`. El dueño aún no lo usa con clientes reales.
 - Suite backend: 290 tests (52 archivos), 290/290 con Firebase simulado.
-- Working tree con la falla 2 y `docs/` sin commit.
+- Falla 2 y `docs/` publicados en `main`.
 - Auditoría completa de solo lectura hecha el 2026-11-03; hallazgos en `KNOWN_ISSUES.md`.
 
 ## Plan de corrección (orden fijado por el dueño)
 | # | Tema | Estado |
 |---|---|---|
 | 1 | Pedidos con mesa cerrada / participante quitado | Hecho y publicado (`74e1513`) |
-| 2 | Aislamiento multiempresa en pedidos | Hecho, **sin commit** (falta autorización para publicar) |
+| 2 | Aislamiento multiempresa en pedidos | Hecho y publicado (`7be7f81`) |
 | 3 | Webhook y transiciones de MercadoPago | **Siguiente** |
 | 4 | Efectivo y movimientos de caja | Pendiente |
 | 5 | Cancelaciones, devoluciones y saldos | Pendiente |

@@ -6,7 +6,7 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 | # | Problema | Evidencia | Estado |
 |---|---|---|---|
 | 1 | Pedidos con mesa cerrada o participante quitado | Reproducido | Corregido `74e1513` |
-| 2 | `createOrder` no valida sucursal/mesa/cliente del tenant; `recomputeSessionTotal` suma pedidos sin filtrar tenant | Reproducido | Corregido (sin commit) |
+| 2 | `createOrder` no valida sucursal/mesa/cliente del tenant; `recomputeSessionTotal` suma pedidos sin filtrar tenant | Reproducido | Corregido `7be7f81` |
 | 3 | Webhook MP: idempotencia por `topic:data.id` pierde `in_process→approved`; responde 200 si falla | Reproducido | Abierto |
 | 3b | Webhook sin lock del pago vs. "Verificar pago" con lock → posible doble crédito | Código | Abierto |
 | 3c | Llamadas a MP (refund, re-consulta) dentro de transacciones con filas bloqueadas | Código | Abierto |
