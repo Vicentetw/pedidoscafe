@@ -374,7 +374,13 @@ async function applyMpPaymentUpdate(tenantId, payment, real, conn) {
 }
 
 async function processMpWebhookNotification({ dataId, topic, signatureOk }) {
-  const notificationId = `${topic || 'payment'}:${dataId}`;
+  // Nunca se confía en el payload del webhook a secas: se re-consulta el
+  // estado real del pago a la API de MercadoPago — FUERA de la transacción
+  // (no se espera a la red con filas tomadas). El estado real entra en la
+  // clave de idempotencia: in_process y después approved del MISMO pago
+  // son dos notificaciones distintas; la misma approved repetida, no.
+  const real = signatureOk ? await mpProvider.fetchPaymentStatus(dataId) : null;
+  const notificationId = `${topic || 'payment'}:${dataId}${real ? `:${real.status}` : ''}`;
   return withTransaction(async (conn) => {
     if (await repo.findWebhookEvent(notificationId, conn)) {
       return { duplicate: true };
@@ -392,18 +398,18 @@ async function processMpWebhookNotification({ dataId, topic, signatureOk }) {
       return { duplicate: false, ignored: true, reason: 'bad_signature' };
     }
 
-    // Nunca se confía en el payload del webhook a secas: se re-consulta el
-    // estado real del pago a la API de MercadoPago.
-    const real = await mpProvider.fetchPaymentStatus(dataId);
-    const payment =
+    const found =
       (await repo.findPaymentByExternalRef(real.externalReference, conn)) ||
       (await repo.findPaymentByProviderRef(dataId, conn));
-    if (!payment) {
+    if (!found) {
       await repo.markWebhookProcessed(eventRowId, conn);
       return { duplicate: false, unmatched: true };
     }
 
-    const tenantId = payment.tenant_id;
+    // Se bloquea y relee el pago (igual que "Verificar pago"): si el otro
+    // camino ya lo aprobó, applyMpPaymentUpdate no acredita dos veces.
+    const tenantId = found.tenant_id;
+    const payment = await repo.lockPayment(tenantId, found.id, conn);
     const { mapped, sessionStatus } = await applyMpPaymentUpdate(tenantId, payment, real, conn);
     await repo.markWebhookProcessed(eventRowId, conn);
     return { duplicate: false, paymentId: payment.id, tenantId, branchId: payment.branch_id, sessionId: payment.session_id, mapped, sessionStatus };
@@ -423,13 +429,16 @@ async function processMpWebhookNotification({ dataId, topic, signatureOk }) {
 // haya avisado nada) y aplica el mismo camino que el webhook si encuentra
 // algo. Lo dispara el staff a pedido ("Verificar pago"), no un cron.
 async function checkPendingMpPayment(tenantId, paymentId, actor) {
+  // La consulta a MercadoPago va FUERA de la transacción; adentro se
+  // bloquea el pago y se vuelve a mirar que siga PENDING.
+  const pre = await repo.findPayment(tenantId, paymentId);
+  if (!pre) throw new NotFoundError('Ese pago no existe.');
+  if (pre.provider !== 'MERCADOPAGO') throw new ValidationError('Este pago no es de MercadoPago.');
+  const real = pre.status === 'PENDING' ? await mpProvider.findPaymentByExternalReference(pre.external_reference) : null;
+
   const outcome = await withTransaction(async (conn) => {
     const payment = await repo.lockPayment(tenantId, paymentId, conn);
-    if (!payment) throw new NotFoundError('Ese pago no existe.');
-    if (payment.provider !== 'MERCADOPAGO') throw new ValidationError('Este pago no es de MercadoPago.');
     if (payment.status !== 'PENDING') return { checked: false }; // ya se resolvió antes (webhook, u otro chequeo)
-
-    const real = await mpProvider.findPaymentByExternalReference(payment.external_reference);
     if (!real) return { checked: true, found: false }; // MercadoPago todavía no tiene nada con esta referencia
 
     const { mapped, sessionStatus } = await applyMpPaymentUpdate(tenantId, payment, real, conn);

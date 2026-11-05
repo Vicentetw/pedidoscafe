@@ -71,7 +71,7 @@ async function fetchPaymentStatus(mpPaymentId, { fetchImpl = fetch } = {}) {
   });
   const json = await res.json();
   if (!res.ok) {
-    throw new DomainError('No se pudo confirmar el pago con MercadoPago.', { status: 502, code: 'MP_FETCH_FAILED' });
+    throw new DomainError('No se pudo confirmar el pago con MercadoPago.', { status: 502, code: 'MP_FETCH_FAILED', details: { httpStatus: res.status } });
   }
   return {
     id: String(json.id),

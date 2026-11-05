@@ -2,6 +2,15 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-05 — falla 3 (publicado)
+Webhook y "Verificar pago" de MercadoPago.
+- `payments.service.js` `processMpWebhookNotification`: re-consulta a MP fuera de la transacción; clave de idempotencia `topic:data.id:estado` (antes se perdía in_process→approved); bloquea y relee el pago antes de aplicar (antes podía acreditar dos veces junto a "Verificar pago").
+- `checkPendingMpPayment`: consulta a MP fuera de la transacción; adentro bloquea y revalida PENDING.
+- `webhook.routes.js`: error transitorio → 500 (MP reintenta); antes 200 y se perdía. Avisos que no son de pagos (`merchant_order`) y pagos que MP no conoce (404) siguen en 200.
+- `mercadopago.provider.js`: el error de re-consulta incluye el código HTTP de MP.
+- 5 tests nuevos (`mp-webhook-transitions.test.js`); `payments-webhook.test.js` ajustado al nuevo formato de clave. Suite 295/295. Sin migraciones.
+- Queda para la falla 5: la devolución sigue llamando a MP dentro de la transacción.
+
 ## 2026-11-03 — `7be7f81` falla 2 (publicado)
 Aislamiento multiempresa al crear pedidos.
 - `orders.service.js` `createOrder`: 422 si la sucursal, la mesa o el cliente no son de la empresa, o si la mesa es de otra sucursal.

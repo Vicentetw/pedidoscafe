@@ -6,10 +6,9 @@ const svc = require('./payments.service');
 
 // Webhook de MercadoPago — necesita el body CRUDO para poder validar la
 // firma x-signature (por eso se monta con express.raw ANTES de
-// express.json en server.js). MercadoPago espera 200 rápido: cualquier
-// error nuestro responde 200 igual (evita una tormenta de reintentos por
-// algo que no se va a resolver reintentando) — la única excepción es una
-// firma inválida, que sí se rechaza con 401.
+// express.json en server.js). Duplicados y pagos que no son nuestros
+// responden 200; firma inválida 401; un error al procesar 500, para que
+// MercadoPago reintente (antes respondía 200 y el aviso se perdía).
 function buildWebhookRouter() {
   const router = express.Router();
 
@@ -33,12 +32,22 @@ function buildWebhookRouter() {
       }
 
       if (!dataId) return res.status(200).json({ ok: true }); // notificación sin id de recurso: nada que hacer
+      // sólo se procesan avisos de pagos (merchant_order y otros tópicos: nada que hacer)
+      if (topic && topic !== 'payment') return res.status(200).json({ ok: true, ignored: true });
 
       const result = await svc.processMpWebhookNotification({ dataId: String(dataId), topic, signatureOk: !!secret ? signatureOk : true });
       res.status(200).json({ ok: true, duplicate: !!result.duplicate });
     } catch (err) {
+      // MercadoPago no conoce ese pago (p. ej. el aviso de prueba del panel):
+      // reintentar no lo va a resolver.
+      if (err.code === 'MP_FETCH_FAILED' && err.details?.httpStatus === 404) {
+        logger.warn('mp_webhook_unknown_payment', { message: err.message });
+        return res.status(200).json({ ok: false, ignored: true });
+      }
       logger.error('mp_webhook_error', { message: err.message, stack: err.stack });
-      res.status(200).json({ ok: false }); // ver comentario de arriba
+      // 500 para que MercadoPago reintente: la transacción se deshizo y la
+      // notificación no quedó registrada, así que el reintento se procesa.
+      res.status(500).json({ ok: false });
     }
   });
 

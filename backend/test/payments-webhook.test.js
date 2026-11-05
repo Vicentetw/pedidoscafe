@@ -41,7 +41,7 @@ function post(dataId, headers) {
 // no la toca. Se limpia acá por los ids de notificación que usa ESTE
 // archivo, para no arrastrar filas de una corrida anterior.
 async function cleanupWebhookEvents() {
-  await db.query("DELETE FROM mp_webhook_events WHERE mp_notification_id IN ('payment:mp-does-not-matter', 'payment:mp-pay-1', 'payment:mp-pay-2')");
+  await db.query("DELETE FROM mp_webhook_events WHERE mp_notification_id IN ('payment:mp-does-not-matter', 'payment:mp-pay-1', 'payment:mp-pay-2', 'payment:mp-pay-1:approved', 'payment:mp-pay-2:approved')");
 }
 
 before(async () => {
@@ -102,7 +102,7 @@ test('CASO OBLIGATORIO 3: la MISMA notificación llega dos veces -> una sola tra
   assert.equal(res2.status, 200);
   assert.equal((await res2.json()).duplicate, true);
 
-  const [[{ n: events }]] = await db.query('SELECT COUNT(*) n FROM mp_webhook_events WHERE mp_notification_id = ?', ['payment:mp-pay-1']);
+  const [[{ n: events }]] = await db.query('SELECT COUNT(*) n FROM mp_webhook_events WHERE mp_notification_id = ?', ['payment:mp-pay-1:approved']);
   assert.equal(events, 1, 'una sola fila de idempotencia para esta notificación');
   const [[{ n: txns }]] = await db.query("SELECT COUNT(*) n FROM payment_transactions WHERE payment_id = ? AND type = 'CAPTURE'", [ctx.paymentId]);
   assert.equal(txns, 1, 'una sola transacción CAPTURE, no dos');
