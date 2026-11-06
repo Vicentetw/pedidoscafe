@@ -10,7 +10,7 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 | 3 | Webhook MP: idempotencia por `topic:data.id` pierde `in_process→approved`; responde 200 si falla | Reproducido | Corregido (falla 3) |
 | 3b | Webhook sin lock del pago vs. "Verificar pago" con lock → posible doble crédito | Reproducido | Corregido (falla 3) |
 | 3c | Llamadas a MP dentro de transacciones: re-consultas corregidas (falla 3); **refund pendiente → falla 5** (registrar devolución PENDING antes de llamar a MP, `X-Idempotency-Key`, probar en sandbox) | Código | Parcial |
-| 4 | La UI nunca manda `cashSessionId`: ventas fuera de la caja física | Reproducido | Abierto |
+| 4 | La UI nunca manda `cashSessionId`: ventas fuera de la caja física; el backend aceptaba una caja de otra sucursal | Reproducido | Corregido (falla 4) |
 | 5 | Cancelar un pedido pagado no devuelve ni avisa; las devoluciones no revierten puntos | Reproducido / Código | Abierto |
 | 5b | `updateItem` en pedido confirmado no ajusta stock ni avisa a cocina; enmiendas `amend_paid` sin auditoría | Código | Abierto |
 | 6 | Sin stock responde HTTP 200 con error; el frontend lo toma como éxito | Reproducido | Abierto |
@@ -33,7 +33,12 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 - Quitar a alguien no lo veta (puede re-escanear el QR); SSE ya abierta no se corta; `session_closed` no llega al comensal.
 - Firma del webhook opcional (mitigado por la re-consulta a MP).
 
+## Vistos durante la falla 4 (no corregidos)
+- No hay pantalla para cobrar pedidos de mostrador (`POST /payments/orders/:id/charge` existe, ninguna UI lo llama).
+- Un mozo con `staff.mozo_can_charge` no tiene `cash:view`: no ve las cajas; con una sola abierta funciona, con varias no puede elegir.
+
 ## No cambiar sin decisión explícita
+- Sin caja abierta no se cobra en efectivo (decidido 2026-11-05).
 - Staff puede cancelar pedidos en mesa cerrada.
 - El comensal puede consultar lo consumido con la mesa cerrada (GET).
 - Lógica duplicada de ruteo a cocina (`submitOrder` y `routeItemsToKitchen`): corregir ambas copias.

@@ -5,6 +5,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../src/db');
 const { resetTenant } = require('./helpers/db');
+const { openCash } = require('./helpers/cash');
 const tablesRepo = require('../src/modules/tables/tables.repository');
 const tablesSvc = require('../src/modules/tables/tables.service');
 const orderSvc = require('../src/modules/orders/orders.service');
@@ -20,6 +21,7 @@ const staff = { actorId: null, req: {} };
 async function seed(tid, label, price) {
   await db.query('INSERT INTO tenants (id, name, slug) VALUES (?, ?, ?)', [tid, `Pay ${label}`, `pay-${label.toLowerCase()}-iso`]);
   const [br] = await db.query('INSERT INTO branches (tenant_id, code, name) VALUES (?, ?, ?)', [tid, 'centro', `C ${label}`]);
+  await openCash(tid, br.insertId);
   const [m] = await db.query('INSERT INTO menus (tenant_id, branch_id, code, name) VALUES (?, NULL, ?, ?)', [tid, 'p', 'P']);
   const [c] = await db.query('INSERT INTO menu_categories (tenant_id, menu_id, code, name) VALUES (?, ?, ?, ?)', [tid, m.insertId, 'g', 'G']);
   await db.query('INSERT INTO products (tenant_id, category_id, code, name, base_price) VALUES (?, ?, ?, ?, ?)', [tid, c.insertId, 'x', `X ${label}`, price]);

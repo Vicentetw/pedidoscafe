@@ -7,6 +7,7 @@ const { test, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const db = require('../src/db');
 const { resetTenant } = require('./helpers/db');
+const { openCash } = require('./helpers/cash');
 const crmSvc = require('../src/modules/crm/crm.service');
 const loyaltySvc = require('../src/modules/loyalty/loyalty.service');
 const promoSvc = require('../src/modules/promotions/promotions.service');
@@ -27,6 +28,7 @@ before(async () => {
   await resetTenant(T);
   await db.query('INSERT INTO tenants (id, name, slug) VALUES (?, ?, ?)', [T, 'Promo', 'promo-test']);
   const [b] = await db.query('INSERT INTO branches (tenant_id, code, name) VALUES (?, ?, ?)', [T, 'centro', 'Centro']);
+  await openCash(T, b.insertId);
   ctx.branchId = b.insertId;
   const [m] = await db.query('INSERT INTO menus (tenant_id, branch_id, code, name) VALUES (?, NULL, ?, ?)', [T, 'p', 'P']);
   const [c] = await db.query('INSERT INTO menu_categories (tenant_id, menu_id, code, name) VALUES (?, ?, ?, ?)', [T, m.insertId, 'g', 'G']);

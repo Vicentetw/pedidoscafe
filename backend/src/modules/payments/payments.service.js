@@ -196,16 +196,17 @@ async function chargeSession(tenantId, sessionId, input, actor) {
     }
 
     const kind = mode === 'GROUP' ? 'SESSION_GROUP' : mode === 'INDIVIDUAL' ? 'SESSION_INDIVIDUAL' : 'SESSION_SPLIT';
+    const cashSessionId = provider === 'CASH' ? await cashService.resolveSessionForCashPayment(tenantId, session.branch_id, input.cashSessionId, conn) : null;
     const { id: paymentId, externalReference } = await repo.createPayment(tenantId, {
       branchId: session.branch_id, sessionId, kind, provider,
       amount: fromCents(amountCents), tipAmount: input.tipAmount ?? 0, currency: session.currency,
-      cashSessionId: provider === 'CASH' ? input.cashSessionId ?? null : null,
+      cashSessionId,
       participantId: participantDbId, createdBy: actor.actorId ?? null,
     }, conn);
     await repo.addAllocation(tenantId, paymentId, { participantId: participantDbId, amount: fromCents(amountCents) }, conn);
 
     if (provider === 'CASH') {
-      await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId: input.cashSessionId, actorId: actor.actorId });
+      await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId, actorId: actor.actorId });
       if (mode !== 'SPLIT') await markSessionOrdersPaid(tenantId, sessionId, participantDbId, conn);
       await enqueue(conn, { tenantId, branchId: session.branch_id, type: 'PaymentApproved', payload: { paymentId, sessionId } });
       return { done: true, paymentId, branchId: session.branch_id };
@@ -251,7 +252,7 @@ async function notifySession(tenantId, sessionId, branchId) {
 
 // Dividir en partes iguales — sólo efectivo (liquida en el momento). Para
 // MercadoPago, cada persona paga su parte con `mode: INDIVIDUAL`.
-async function splitEqual(tenantId, sessionId, parts, actor, cashSessionId = null) {
+async function splitEqual(tenantId, sessionId, parts, actor, requestedCashSessionId = null) {
   const n = Number(parts);
   if (!Number.isInteger(n) || n < 2 || n > 20) throw new ValidationError('Elegí entre 2 y 20 partes.');
   const paymentIds = await withTransaction(async (conn) => {
@@ -260,6 +261,7 @@ async function splitEqual(tenantId, sessionId, parts, actor, cashSessionId = nul
     assertPayable(session);
     const remaining = computeGroupAmountCents(session);
     if (remaining <= 0) throw new ConflictError('La mesa ya está saldada.', { code: 'ALREADY_PAID' });
+    const cashSessionId = await cashService.resolveSessionForCashPayment(tenantId, session.branch_id, requestedCashSessionId, conn);
 
     const share = Math.floor(remaining / n);
     const ids = [];
@@ -294,21 +296,20 @@ async function chargeOrder(tenantId, orderId, input, actor) {
 
     const amountCents = toCents(order.total);
     if (amountCents <= 0) throw new ValidationError('El pedido no tiene ítems.');
+    const cashSessionId = provider === 'CASH' ? await cashService.resolveSessionForCashPayment(tenantId, order.branch_id, input.cashSessionId, conn) : null;
     const { id: paymentId, externalReference } = await repo.createPayment(tenantId, {
       branchId: order.branch_id, orderId, kind: 'ORDER', provider,
       amount: order.total, tipAmount: input.tipAmount ?? 0, currency: order.currency,
-      cashSessionId: provider === 'CASH' ? input.cashSessionId ?? null : null, createdBy: actor.actorId ?? null,
+      cashSessionId, createdBy: actor.actorId ?? null,
     }, conn);
     await repo.addAllocation(tenantId, paymentId, { orderId, amount: order.total }, conn);
 
     if (provider === 'CASH') {
       await repo.setPaymentStatus(tenantId, paymentId, 'APPROVED', {}, conn);
       await repo.addTransaction(tenantId, paymentId, { type: 'CAPTURE', amount: order.total, status: 'approved' }, conn);
-      if (input.cashSessionId) {
-        await cashService.recordCashMovementForPayment(tenantId, input.cashSessionId, {
-          type: 'SALE', amount: order.total, paymentId, actorUserId: actor.actorId ?? null,
-        }, conn);
-      }
+      await cashService.recordCashMovementForPayment(tenantId, cashSessionId, {
+        type: 'SALE', amount: order.total, paymentId, actorUserId: actor.actorId ?? null,
+      }, conn);
       await ordersRepo.setOrderPaymentStatus(tenantId, orderId, 'PAID', conn);
       // Fidelización (Fase 10) — sólo si el pedido ya tenía un cliente
       // identificado (Fase 9); sin regla activa es un no-op silencioso.

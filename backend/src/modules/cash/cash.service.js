@@ -95,7 +95,24 @@ async function recordCashMovementForPayment(tenantId, cashSessionId, { type, amo
   await repo.addMovement(tenantId, session.branch_id, cashSessionId, { type, amount, paymentId, actorUserId }, conn);
 }
 
+// Caja en la que entra un cobro en efectivo (falla 4): sin caja abierta en
+// la sucursal no se cobra en efectivo. Sin `cashSessionId`, se usa la única
+// caja abierta de la sucursal; si hay varias, hay que elegir.
+async function resolveSessionForCashPayment(tenantId, branchId, cashSessionId, conn) {
+  if (cashSessionId) {
+    const session = await repo.findSession(tenantId, cashSessionId, conn);
+    if (!session || session.branch_id !== branchId) throw new ValidationError('Esa caja no existe en esta sucursal.');
+    if (session.status !== 'OPEN') throw new ConflictError('La caja elegida ya está cerrada.');
+    return session.id;
+  }
+  const open = await repo.listOpenSessions(tenantId, branchId, conn);
+  if (open.length === 0) throw new ConflictError('Abrí una caja para cobrar en efectivo.', { code: 'CASH_SESSION_REQUIRED' });
+  if (open.length > 1) throw new ConflictError('Hay varias cajas abiertas: elegí en cuál cobrás.', { code: 'CASH_SESSION_AMBIGUOUS' });
+  return open[0].id;
+}
+
 module.exports = {
+  resolveSessionForCashPayment,
   listRegisters, createRegister, openRegister, listOpenSessions, getSession, addMovement, closeRegisterSession,
   recordCashMovementForPayment,
 };

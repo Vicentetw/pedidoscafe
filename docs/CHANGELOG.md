@@ -2,6 +2,14 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-06 — falla 4 (publicado)
+Efectivo y caja. Decisión del dueño: sin caja abierta no se cobra en efectivo (como los POS de restaurante).
+- `cash.service.js` `resolveSessionForCashPayment`: sin caja abierta en la sucursal → 409 `CASH_SESSION_REQUIRED`; sin `cashSessionId` usa la única abierta; varias → 409 `CASH_SESSION_AMBIGUOUS`; caja de otra sucursal → 422.
+- `payments.service.js`: `chargeSession` (CASH), `splitEqual` y `chargeOrder` (CASH) la usan; toda venta en efectivo queda como movimiento SALE de esa caja.
+- `payments-page.ts`: ayuda "¿Cómo se cobra?", aviso si no hay caja (con link a Cajas si tiene `cash:open`), selector si hay varias, manda `cashSessionId`.
+- 4 tests nuevos (`cash-required.test.js`); `helpers/cash.js` abre una caja en 9 archivos de test que cobran en efectivo. Suite 300/300. Frontend compila. Sin migraciones.
+- MercadoPago no pasa por la caja (sin cambios).
+
 ## 2026-11-05 — falla 3 (publicado)
 Webhook y "Verificar pago" de MercadoPago.
 - `payments.service.js` `processMpWebhookNotification`: re-consulta a MP fuera de la transacción; clave de idempotencia `topic:data.id:estado` (antes se perdía in_process→approved); bloquea y relee el pago antes de aplicar (antes podía acreditar dos veces junto a "Verificar pago").

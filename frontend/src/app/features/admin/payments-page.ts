@@ -1,7 +1,8 @@
 import { Component, OnInit, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 import { Api } from '../../core/api';
+import { CurrentUserService } from '../../core/current-user';
 
 interface Branch { id: number; name: string; }
 interface OpenSession { id: number; public_id: string; table_code: string; status: string; participant_count: number; }
@@ -9,6 +10,7 @@ interface Balance {
   status: string; currency: string; total: string; paid: string; remaining: string;
   byParticipant: { participantId: string; name: string; owed: string; paid: string; remaining: string }[];
 }
+interface CashSession { id: number; register_code: string; register_name: string; }
 interface Payment { id: number; public_id: string; kind: string; provider: string; amount: string; status: string; created_at: string; }
 
 const STATUS_LABEL: Record<string, string> = {
@@ -21,9 +23,18 @@ const STATUS_LABEL: Record<string, string> = {
 // devoluciones. /admin/caja, permiso payments:charge para cobrar.
 @Component({
   selector: 'app-payments-page',
-  imports: [FormsModule],
+  imports: [FormsModule, RouterLink],
   template: `
     <h1>Caja</h1>
+    <details class="help">
+      <summary>¿Cómo se cobra?</summary>
+      <ol>
+        <li>Al empezar el turno, abrí una caja en <strong>Cajas</strong> con el cambio inicial. Sin caja abierta no se puede cobrar en efectivo.</li>
+        <li>Elegí la mesa en <strong>Mesas abiertas</strong>: vas a ver el total, lo pagado y lo que falta.</li>
+        <li>Cobrá toda la mesa, a cada persona por separado, o dividí en partes iguales. Si te entregan de más, el sistema te calcula el vuelto.</li>
+        <li>Cada cobro en efectivo se suma a la caja abierta; al cerrarla, el sistema compara lo contado con lo esperado.</li>
+      </ol>
+    </details>
     @if (error()) { <p style="color:var(--danger)">{{ error() }}</p> }
 
     <div class="card">
@@ -72,6 +83,25 @@ const STATUS_LABEL: Record<string, string> = {
             <p>Total: {{ bal.currency }} {{ bal.total }} · Pagado: {{ bal.currency }} {{ bal.paid }} · <strong>Falta: {{ bal.currency }} {{ bal.remaining }}</strong></p>
 
             @if (+bal.remaining > 0) {
+              @if (cashSessions(); as cs) {
+                @if (cs.length === 0) {
+                  <div class="notice">
+                    <strong>No hay ninguna caja abierta en esta sucursal.</strong>
+                    Para cobrar en efectivo, primero hay que abrir una (al empezar el turno, con el cambio inicial).
+                    @if (canOpenCash()) { <a routerLink="/admin/cajas">Abrir una caja</a> } @else { Pedile al encargado que la abra. }
+                    <button class="link-inline" (click)="loadCash()">Ya la abrí, actualizar</button>
+                  </div>
+                } @else if (cs.length === 1) {
+                  <p class="muted small">💵 El efectivo entra en la caja <strong>{{ cs[0].register_name }}</strong>.</p>
+                } @else {
+                  <label class="flabel">¿En qué caja entra este efectivo?
+                    <select [(ngModel)]="cashSessionId">
+                      <option [ngValue]="null" disabled>Elegí una caja…</option>
+                      @for (c of cs; track c.id) { <option [ngValue]="c.id">{{ c.register_name }}</option> }
+                    </select>
+                  </label>
+                }
+              }
               @if (cashPrompt(); as cp) {
                 <div class="card cash-modal">
                   <h4>Cobrar en efectivo — {{ cp.label }}</h4>
@@ -86,7 +116,7 @@ const STATUS_LABEL: Record<string, string> = {
                     <p class="err">Lo que entrega es menos de lo que falta cobrar — pedile el resto o cancelá.</p>
                   }
                   <div class="row">
-                    <button class="primary" [disabled]="busy() || tenderedShort(cp)" (click)="confirmCash(cp)">
+                    <button class="primary" [disabled]="busy() || tenderedShort(cp) || !cashReady()" (click)="confirmCash(cp)">
                       {{ busy() ? 'Cobrando…' : 'Confirmar cobro' }}
                     </button>
                     <button [disabled]="busy()" (click)="cashPrompt.set(null)">Cancelar</button>
@@ -94,9 +124,9 @@ const STATUS_LABEL: Record<string, string> = {
                 </div>
               } @else {
                 <div class="row">
-                  <button class="primary" [disabled]="busy()" (click)="openCash('GROUP', 'Toda la mesa', +bal.remaining)">Cobrar todo (efectivo)</button>
-                  <input type="number" placeholder="partes" [(ngModel)]="parts" style="max-width:90px" />
-                  <button [disabled]="busy()" (click)="splitEqual()">Dividir en partes iguales</button>
+                  <button class="primary" [disabled]="busy() || !cashReady()" (click)="openCash('GROUP', 'Toda la mesa', +bal.remaining)">Cobrar todo (efectivo)</button>
+                  <input type="number" min="2" max="20" placeholder="partes" title="En cuántas partes iguales (2 a 20)" [(ngModel)]="parts" style="max-width:90px" />
+                  <button [disabled]="busy() || !cashReady()" title="Cobra la cuenta en partes iguales, todas en efectivo" (click)="splitEqual()">Dividir en partes iguales</button>
                 </div>
                 <h4>Por persona</h4>
                 <ul>
@@ -104,7 +134,7 @@ const STATUS_LABEL: Record<string, string> = {
                     <li>
                       {{ p.name }}: debe {{ bal.currency }} {{ p.remaining }}
                       @if (+p.remaining > 0) {
-                        <button (click)="openCash('INDIVIDUAL', p.name, +p.remaining, p.participantId)">Cobrar (efectivo)</button>
+                        <button [disabled]="!cashReady()" (click)="openCash('INDIVIDUAL', p.name, +p.remaining, p.participantId)">Cobrar (efectivo)</button>
                       }
                     </li>
                   }
@@ -181,6 +211,12 @@ const STATUS_LABEL: Record<string, string> = {
     .pager { justify-content: space-between; }
     .err { color: var(--danger); }
     .ok { color: var(--success); }
+    .help { margin-bottom: var(--space-4); font-size: .9rem; color: var(--muted); }
+    .help summary { cursor: pointer; color: var(--text); }
+    .help ol { margin: 6px 0 0; padding-left: 1.2rem; display: flex; flex-direction: column; gap: 4px; }
+    .notice { background: var(--surface-2); border-left: 4px solid var(--danger); padding: 10px 12px; border-radius: 8px; margin: 10px 0; display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
+    .link-inline { border: none; background: none; padding: 0; color: var(--primary); text-decoration: underline; }
+    .small { font-size: .85rem; }
     .cash-modal { background: var(--surface-2); gap: var(--space-2); display: flex; flex-direction: column; }
     .cash-modal label { display: flex; flex-direction: column; gap: 4px; font-size: .85rem; color: var(--muted); }
   `],
@@ -188,6 +224,7 @@ const STATUS_LABEL: Record<string, string> = {
 export class PaymentsPage implements OnInit {
   private readonly api = inject(Api);
   private readonly route = inject(ActivatedRoute);
+  private readonly currentUser = inject(CurrentUserService);
   // Llegada directa desde "💳 Cobrar en Caja" en Mesas (?branchId=&sessionId=)
   private pendingSessionId: number | null = null;
 
@@ -202,6 +239,33 @@ export class PaymentsPage implements OnInit {
   readonly checking = signal<number | null>(null);
   readonly error = signal('');
   parts = 2;
+
+  // -------- caja en la que entra el efectivo (falla 4). null = no se pudo
+  // consultar (p. ej. un mozo sin cash:view): el backend usa la única caja
+  // abierta de la sucursal y, si no hay, devuelve un mensaje claro.
+  readonly cashSessions = signal<CashSession[] | null>(null);
+  cashSessionId: number | null = null;
+  canOpenCash() { return this.currentUser.hasPermission('cash:open'); }
+  cashReady() {
+    const cs = this.cashSessions();
+    if (cs == null) return true;
+    return cs.length === 1 || (cs.length > 1 && this.cashSessionId != null);
+  }
+  loadCash() {
+    const id = this.branchId();
+    if (!id) return;
+    this.api.get<{ data: CashSession[] }>(`/api/cash/sessions/open?branchId=${id}`).subscribe({
+      next: (r) => {
+        this.cashSessions.set(r.data);
+        if (!r.data.some((c) => c.id === this.cashSessionId)) this.cashSessionId = null;
+      },
+      error: () => this.cashSessions.set(null),
+    });
+  }
+  private withCash(body: any) {
+    if (this.cashSessionId != null) body.cashSessionId = this.cashSessionId;
+    return body;
+  }
 
   // -------- historial de pagos de la sucursal (no sólo la mesa seleccionada)
   readonly mode = signal<'mesas' | 'historial'>('mesas');
@@ -284,6 +348,7 @@ export class PaymentsPage implements OnInit {
     });
     this.api.get<any>(`/api/payments/reconciliation?branchId=${id}`).subscribe({ next: (r) => this.reconciliation.set(r), error: () => this.reconciliation.set(null) });
     if (this.mode() === 'historial') this.loadHistory();
+    this.loadCash(); // al cambiar de sucursal, loadCash descarta la caja elegida de la otra
   }
   select(s: OpenSession) {
     this.selected.set(s);
@@ -325,14 +390,14 @@ export class PaymentsPage implements OnInit {
     if (cp.kind === 'INDIVIDUAL') body.participantId = cp.participantId;
     this.error.set('');
     this.busy.set(true);
-    this.api.post(`/api/payments/sessions/${this.selected()!.id}/charges`, body).subscribe({
+    this.api.post(`/api/payments/sessions/${this.selected()!.id}/charges`, this.withCash(body)).subscribe({
       next: () => { this.busy.set(false); this.cashPrompt.set(null); this.reload(); this.pickBranch(this.branchId()!); },
-      error: (e) => { this.busy.set(false); this.fail(e, 'No se pudo completar el cobro.'); },
+      error: (e) => { this.busy.set(false); this.fail(e, 'No se pudo completar el cobro.'); this.loadCash(); },
     });
   }
   splitEqual() {
     if (!confirm(`¿Confirmás dividir la cuenta en ${this.parts} partes iguales y cobrarlas en efectivo?`)) return;
-    this.run(this.api.post(`/api/payments/sessions/${this.selected()!.id}/split-equal`, { parts: this.parts }));
+    this.run(this.api.post(`/api/payments/sessions/${this.selected()!.id}/split-equal`, this.withCash({ parts: this.parts })));
   }
   refund(p: Payment) {
     // Devolución parcial — pedido explícito de la aceptación (ej. un
