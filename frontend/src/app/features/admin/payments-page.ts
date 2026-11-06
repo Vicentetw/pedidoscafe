@@ -59,6 +59,7 @@ const STATUS_LABEL: Record<string, string> = {
             <li>Pedidos de mostrador entregados sin cobrar: {{ rec.unpaidCounterOrders.length }}</li>
             <li>Mesas cerradas por la fuerza con saldo: {{ rec.forceClosedWithBalance.length }}</li>
             <li>Devoluciones pendientes: {{ rec.pendingRefunds.length }}</li>
+            <li title="Se cancelaron después de cobrarlos: el dinero sigue cobrado. Revisá cada caso con el cliente.">Pedidos cancelados ya cobrados (revisar): {{ rec.cancelledPaidOrders?.length ?? 0 }}</li>
           </ul>
         </div>
       }

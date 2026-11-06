@@ -187,7 +187,14 @@ async function ticketsForOrder(tenantId, orderId, conn = pool) {
   return rows;
 }
 
+// Cambio de cantidad de un ítem ya enviado (staff amend, sólo
+// CONFIRMED/QUEUED): cocina ve la cantidad nueva en el mismo ticket.
+async function setTicketItemQty(orderItemId, qty, conn = pool) {
+  await conn.query(`UPDATE kitchen_ticket_items SET qty = :qty WHERE order_item_id = :orderItemId`, { orderItemId, qty });
+}
+
 module.exports = {
+  setTicketItemQty,
   listStations, findStation, findStationByCode, createStation, deleteStation,
   listRouting, upsertRouting, deleteRouting, resolveStationFor,
   nextTicketNo, createTicket, listBoard, findTicket, setTicketStatus, ticketsForOrder,

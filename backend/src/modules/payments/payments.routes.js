@@ -22,6 +22,13 @@ router.get('/', view, asyncHandler(async (req, res) => {
     limit: limit ? Math.min(+limit, 200) : undefined, offset: offset ? +offset : undefined,
   }));
 }));
+// -------- conciliación (Fase 7) — ANTES de '/:id': si no, '/:id' la tapa
+// (respondía 500 y la tarjeta de Conciliación no se veía).
+router.get('/reconciliation', requirePermission('payments:view'), asyncHandler(async (req, res) => {
+  const branchId = req.query.branchId ? +req.query.branchId : null;
+  if (!branchId) return res.status(400).json({ error: 'Indicá ?branchId=.', code: 'BRANCH_REQUIRED' });
+  res.json(await svc.getReconciliation(req.tenantId, branchId, { staleMinutes: req.query.staleMinutes ? +req.query.staleMinutes : undefined }));
+}));
 router.get('/:id', view, asyncHandler(async (req, res) => res.json(await svc.getPayment(req.tenantId, +req.params.id))));
 router.post('/:id/refund', requirePermission('payments:refund'), asyncHandler(async (req, res) =>
   res.json(await svc.refundPayment(req.tenantId, +req.params.id, s.refund.parse(req.body), staffActor(req)))));
@@ -47,12 +54,5 @@ router.post('/sessions/:sessionId/split-equal', charge, asyncHandler(async (req,
 // -------- mostrador
 router.post('/orders/:orderId/charge', charge, asyncHandler(async (req, res) =>
   res.status(201).json(await svc.chargeOrder(req.tenantId, +req.params.orderId, s.chargeOrder.parse(req.body), staffActor(req)))));
-
-// -------- conciliación (Fase 7)
-router.get('/reconciliation', requirePermission('payments:view'), asyncHandler(async (req, res) => {
-  const branchId = req.query.branchId ? +req.query.branchId : null;
-  if (!branchId) return res.status(400).json({ error: 'Indicá ?branchId=.', code: 'BRANCH_REQUIRED' });
-  res.json(await svc.getReconciliation(req.tenantId, branchId, { staleMinutes: req.query.staleMinutes ? +req.query.staleMinutes : undefined }));
-}));
 
 module.exports = router;

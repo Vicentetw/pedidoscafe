@@ -2,6 +2,17 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-06 — falla 5 sin devoluciones + 7b (publicado)
+Devoluciones congeladas por el dueño: nada de esto mueve dinero.
+- `orders.service.js` `cancelOrder`: pedido ya cobrado → motivo obligatorio (422 sin motivo), el comensal no puede (403), auditoría `cancel_paid`.
+- `payments.service.js` `getReconciliation`: nueva lista `cancelledPaidOrders`.
+- `updateItem` en pedido confirmado: ajusta el stock simple por la diferencia (sin stock → `ITEM_UNAVAILABLE`), actualiza la cantidad en el ticket de cocina, evento `OrderAmended`.
+- Auditoría `amend_add` / `amend_qty` / `amend_remove` en pedidos confirmados.
+- Frontend: aviso y motivo obligatorio al cancelar un pedido cobrado; línea nueva en Conciliación.
+- 7b: `payments.routes.js` declara `/reconciliation` antes de `/:id` (respondía 500); test `payments-reconciliation-route.test.js`.
+- 8 tests nuevos (`order-amend-cancel.test.js` y el de 7b). Suite 308/308. Frontend compila. Sin migraciones.
+- `mp-webhook-transitions.test.js` pasa al tenant 998935 (998930 estaba repetido).
+
 ## 2026-11-06 — falla 4 (publicado)
 Efectivo y caja. Decisión del dueño: sin caja abierta no se cobra en efectivo (como los POS de restaurante).
 - `cash.service.js` `resolveSessionForCashPayment`: sin caja abierta en la sucursal → 409 `CASH_SESSION_REQUIRED`; sin `cashSessionId` usa la única abierta; varias → 409 `CASH_SESSION_AMBIGUOUS`; caja de otra sucursal → 422.

@@ -292,6 +292,7 @@ async function addItem(tenantId, orderId, input, actor) {
   });
 
   if (staffAmend) {
+    await writeAudit({ req: actor.req, tenantId, branchId: order.branch_id, entityType: 'order', entityId: orderId, action: 'amend_add', after: { productCode: input.productCode, qty: input.qty ?? 1 } });
     publish({ tenantId, branchId: order.branch_id, topic: 'kitchen', event: 'ticket_new', data: { orderId } });
   } else if (order.session_id) {
     publish({ tenantId, branchId: order.branch_id, topic: 'session', event: 'someone_ordering',
@@ -309,8 +310,25 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
   if (!item) throw new NotFoundError('Ese ítem no existe en el pedido.');
   const q = Math.max(1, Math.trunc(qty));
   const unitCents = toCents(item.unit_price) + toCents(item.modifiers_total);
+  const delta = q - item.qty;
   await withTransaction(async (conn) => {
     await lockOpenSession(tenantId, order.session_id, conn);
+    if (staffAmend && delta !== 0) {
+      // Pedido ya confirmado: el stock simple ya se descontó por la
+      // cantidad vieja — se ajusta sólo la diferencia (igual que
+      // addItem/removeItem), y cocina ve la cantidad nueva.
+      if (delta > 0) {
+        const stockCheck = await validateAndDecrementSimpleStock(tenantId, [{ product_id: item.product_id, qty: delta }], conn);
+        if (!stockCheck.ok) {
+          throw new DomainError(`No hay stock de "${stockCheck.unavailable[0].name}" para agregarlo ahora.`, { status: 200, code: 'ITEM_UNAVAILABLE' });
+        }
+      } else {
+        const info = await catalogRepo.findStockInfo(tenantId, item.product_id, conn);
+        if (info && info.track_stock) await catalogRepo.restoreStock(tenantId, item.product_id, -delta, conn);
+      }
+      await kitchenRepo.setTicketItemQty(itemId, q, conn);
+      await enqueue(conn, { tenantId, branchId: order.branch_id, type: 'OrderAmended', payload: { orderId, itemId, kind: 'qty', from: item.qty, to: q } });
+    }
     await repo.updateItemQty(tenantId, orderId, itemId, q, item.unit_price, item.modifiers_total, fromCents(unitCents * q), conn);
     const items = await repo.listItems(tenantId, orderId, conn);
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
@@ -320,6 +338,10 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
       await resyncSessionStatus(tenantId, order.session_id, conn);
     }
   });
+  if (staffAmend && delta !== 0) {
+    await writeAudit({ req: actor.req, tenantId, branchId: order.branch_id, entityType: 'order', entityId: orderId, action: 'amend_qty', before: { itemId, qty: item.qty }, after: { itemId, qty: q } });
+    publish({ tenantId, branchId: order.branch_id, topic: 'kitchen', event: 'ticket_new', data: { orderId } });
+  }
   return getOrder(tenantId, orderId);
 }
 
@@ -357,6 +379,9 @@ async function removeItem(tenantId, orderId, itemId, actor) {
       await enqueue(conn, { tenantId, branchId: order.branch_id, type: 'OrderAmended', payload: { orderId, itemId, kind: 'remove' } });
     }
   });
+  if (staffAmend && removedItem) {
+    await writeAudit({ req: actor.req, tenantId, branchId: order.branch_id, entityType: 'order', entityId: orderId, action: 'amend_remove', before: { itemId, productId: removedItem.product_id, qty: removedItem.qty } });
+  }
   return getOrder(tenantId, orderId);
 }
 
@@ -485,6 +510,16 @@ async function cancelOrder(tenantId, orderId, { reason } = {}, actor) {
   if (actor.kind === 'staff' && order.status === 'PREPARING' && !actor.canCancelAfterPrep) {
     throw new ForbiddenError('Cancelar un pedido en preparación requiere el permiso "orders:cancel_after_prep".', { details: { permission: 'orders:cancel_after_prep' } });
   }
+  // Pedido ya cobrado (falla 5): cancelarlo NO devuelve dinero (las
+  // devoluciones están congeladas por decisión del dueño). Se exige motivo,
+  // queda auditado como cancel_paid y aparece en conciliación para revisar.
+  const wasPaid = ['PAID', 'PARTIALLY_PAID'].includes(order.payment_status);
+  if (wasPaid && actor.kind === 'guest') {
+    throw new ForbiddenError('Este pedido ya está cobrado. Pedile al personal que lo cancele.');
+  }
+  if (wasPaid && !(reason && reason.trim().length >= 3)) {
+    throw new ValidationError('Este pedido ya está cobrado: escribí el motivo de la cancelación. El dinero no se devuelve solo; queda anotado para revisar.');
+  }
 
   await withTransaction(async (conn) => {
     const fresh = await repo.lockOrder(tenantId, orderId, conn);
@@ -508,7 +543,7 @@ async function cancelOrder(tenantId, orderId, { reason } = {}, actor) {
     }
     await enqueue(conn, { tenantId, branchId: fresh.branch_id, type: 'OrderCancelled', payload: { orderId, reason } });
   });
-  await writeAudit({ req: actor.req, tenantId, branchId: order.branch_id, entityType: 'order', entityId: orderId, action: 'cancel', before: { status: order.status }, reason });
+  await writeAudit({ req: actor.req, tenantId, branchId: order.branch_id, entityType: 'order', entityId: orderId, action: wasPaid ? 'cancel_paid' : 'cancel', before: { status: order.status, paymentStatus: order.payment_status }, reason });
   publish({ tenantId, branchId: order.branch_id, topic: 'orders', event: 'order_cancelled', data: { orderId } });
   publish({ tenantId, branchId: order.branch_id, topic: 'kitchen', event: 'ticket_removed', data: { orderId } });
   return getOrder(tenantId, orderId);

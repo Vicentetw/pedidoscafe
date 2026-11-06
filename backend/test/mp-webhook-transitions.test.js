@@ -15,7 +15,7 @@ const paySvc = require('../src/modules/payments/payments.service');
 const mpProvider = require('../src/modules/payments/providers/mercadopago.provider');
 const { DomainError } = require('../src/errors');
 
-const T = 998930;
+const T = 998935;
 const SECRET = config.mercadopago.webhookSecret;
 const IDS = ['mp-tr-1', 'mp-tr-2', 'mp-tr-3'];
 let srv;

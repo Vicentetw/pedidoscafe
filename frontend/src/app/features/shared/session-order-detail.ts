@@ -8,7 +8,7 @@ interface OrderItem { id: number; qty: number; name_snapshot: string; variant_sn
 interface Product { code: string; name: string; base_price: string; currency: string; is_active: boolean; }
 interface Order {
   id: number; public_id: string; participant_id: number | null; status: string;
-  currency: string; total: string; items: OrderItem[];
+  payment_status?: string; currency: string; total: string; items: OrderItem[];
 }
 interface Balance {
   currency: string; total: string; paid: string; remaining: string;
@@ -267,8 +267,16 @@ export class SessionOrderDetail implements OnChanges {
   }
 
   cancel(o: Order) {
-    const reason = prompt('Motivo de la cancelación:');
+    // Pedido ya cobrado: cancelarlo NO devuelve el dinero (devoluciones
+    // automáticas desactivadas). Se avisa antes y el motivo es obligatorio.
+    const paid = o.payment_status === 'PAID' || o.payment_status === 'PARTIALLY_PAID';
+    if (paid && !confirm(
+      `Este pedido ya está cobrado (${o.currency} ${o.total}).\n\n` +
+      'Cancelarlo NO devuelve el dinero al cliente: queda anotado en Caja → Conciliación para que el encargado decida qué hacer.\n\n¿Querés cancelarlo igual?'
+    )) return;
+    const reason = prompt(paid ? 'Motivo de la cancelación (obligatorio, mínimo 3 letras):' : 'Motivo de la cancelación:');
     if (reason == null) return;
+    if (paid && reason.trim().length < 3) { this.error.set('Para cancelar un pedido ya cobrado tenés que escribir el motivo.'); return; }
     this.error.set('');
     this.cancelling.set(o.id);
     this.api.post(`/api/orders/${o.id}/cancel`, { reason }).subscribe({

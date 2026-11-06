@@ -512,7 +512,7 @@ async function refundPayment(tenantId, paymentId, input, actor) {
 // quedaron PENDING sin resolver, pedidos de mostrador entregados sin
 // cobrar, mesas cerradas por la fuerza con saldo, y excedentes sin devolver.
 async function getReconciliation(tenantId, branchId, { staleMinutes = 30 } = {}) {
-  const [staleRes, unpaidRes, forceClosedRes, refundsRes] = await Promise.all([
+  const [staleRes, unpaidRes, forceClosedRes, refundsRes, cancelledPaidRes] = await Promise.all([
     pool.query(
       `SELECT id, public_id, kind, amount, currency, created_at FROM payments
         WHERE tenant_id = :tenantId AND branch_id = :branchId AND status = 'PENDING'
@@ -541,12 +541,22 @@ async function getReconciliation(tenantId, branchId, { staleMinutes = 30 } = {})
         ORDER BY r.created_at DESC LIMIT 100`,
       { tenantId, branchId }
     ),
+    // pedidos cancelados que ya estaban cobrados: el dinero sigue cobrado,
+    // alguien tiene que decidir qué hacer (falla 5, sin devolución automática)
+    pool.query(
+      `SELECT id, public_id, session_id, total, currency, payment_status, cancel_reason, cancelled_at FROM orders
+        WHERE tenant_id = :tenantId AND branch_id = :branchId AND status = 'CANCELLED'
+          AND payment_status IN ('PAID','PARTIALLY_PAID')
+        ORDER BY cancelled_at DESC LIMIT 100`,
+      { tenantId, branchId }
+    ),
   ]);
   return {
     stalePending: staleRes[0],
     unpaidCounterOrders: unpaidRes[0],
     forceClosedWithBalance: forceClosedRes[0],
     pendingRefunds: refundsRes[0],
+    cancelledPaidOrders: cancelledPaidRes[0],
   };
 }
 
