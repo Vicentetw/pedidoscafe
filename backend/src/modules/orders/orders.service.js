@@ -270,7 +270,7 @@ async function addItem(tenantId, orderId, input, actor) {
       const newItem = items.find((i) => i.id === itemId);
       const stockCheck = await validateAndDecrementSimpleStock(tenantId, [newItem], conn);
       if (!stockCheck.ok) {
-        throw new DomainError(`No hay stock de "${stockCheck.unavailable[0].name}" para agregarlo ahora.`, { status: 200, code: 'ITEM_UNAVAILABLE' });
+        throw new DomainError(`No hay stock de "${stockCheck.unavailable[0].name}" para agregarlo ahora.`, { status: 409, code: 'ITEM_UNAVAILABLE' });
       }
     }
     await repo.setOrderTotals(tenantId, orderId, sumTotals(items), conn);
@@ -320,7 +320,7 @@ async function updateItem(tenantId, orderId, itemId, { qty }, actor) {
       if (delta > 0) {
         const stockCheck = await validateAndDecrementSimpleStock(tenantId, [{ product_id: item.product_id, qty: delta }], conn);
         if (!stockCheck.ok) {
-          throw new DomainError(`No hay stock de "${stockCheck.unavailable[0].name}" para agregarlo ahora.`, { status: 200, code: 'ITEM_UNAVAILABLE' });
+          throw new DomainError(`No hay stock de "${stockCheck.unavailable[0].name}" para agregarlo ahora.`, { status: 409, code: 'ITEM_UNAVAILABLE' });
         }
       } else {
         const info = await catalogRepo.findStockInfo(tenantId, item.product_id, conn);
@@ -476,12 +476,13 @@ async function submitOrder(tenantId, orderId, actor) {
       publish({ tenantId, branchId: result.order.branch_id, topic: 'session', event: 'menu_availability_changed',
         data: { sessionId: await sessionPublicId(result.order.session_id), items: result.rejected } });
     }
-    // lenguaje humano, NUNCA un 409 crudo (§59)
+    // lenguaje humano, NUNCA un "409 Conflict" crudo en el texto (§59). El
+    // status SÍ es 409: con 200 el frontend lo tomaba como éxito (falla 6).
     throw new DomainError(
       result.rejected.length === 1
         ? `Justo se agotó: ${result.rejected[0].name}. Sacalo del pedido y probá de nuevo.`
         : 'Algunos productos se quedaron sin stock. Revisá el pedido y probá de nuevo.',
-      { status: 200, code: 'ITEM_UNAVAILABLE', details: { items: result.rejected } }
+      { status: 409, code: 'ITEM_UNAVAILABLE', details: { items: result.rejected } }
     );
   }
   if (!result.alreadyConfirmed) {

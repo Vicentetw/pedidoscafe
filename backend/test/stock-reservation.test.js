@@ -67,7 +67,7 @@ test('CASO OBLIGATORIO 1: stock = 1, dos submits simultáneos -> sólo uno obtie
   for (const [id, r] of [[idA, rA], [idB, rB]]) {
     if (r.status === 'fulfilled') statuses.push(r.value.status);
     else {
-      // el rechazo llega como DomainError code ITEM_UNAVAILABLE (status 200)
+      // el rechazo llega como DomainError code ITEM_UNAVAILABLE (status 409)
       assert.equal(r.reason.code, 'ITEM_UNAVAILABLE');
       const [[o]] = await db.query('SELECT status FROM orders WHERE id = ?', [id]);
       statuses.push(o.status);

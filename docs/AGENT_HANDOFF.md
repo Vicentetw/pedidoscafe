@@ -1,10 +1,10 @@
 # Handoff para el próximo agente
 
-Última actualización: 2026-11-04 · falla 5 publicada.
+Última actualización: 2026-11-07 · falla 6 publicada.
 
 ## Estado
 - Producción arriba: backend `https://pedidoscafe.onrender.com`, frontend `restiapedidos.web.app`. El dueño aún no lo usa con clientes reales.
-- Suite backend: 308 tests (56 archivos), 308/308 con Firebase simulado.
+- Suite backend: 310 tests (57 archivos), 310/310 con Firebase simulado.
 - Falla 2 y `docs/` publicados en `main`.
 - Auditoría completa de solo lectura hecha el 2026-11-03; hallazgos en `KNOWN_ISSUES.md`.
 
@@ -16,8 +16,8 @@
 | 3 | Webhook y transiciones de MercadoPago | Hecho y publicado (refund de MP pasa a la 5) |
 | 4 | Efectivo y movimientos de caja | Hecho y publicado (frontend: deploy manual a Firebase) |
 | 5 | Cancelaciones, devoluciones y saldos. **Devoluciones congeladas por decisión del dueño (2026-11-06)**: no tocar `refundPayment` ni el refund de MP hasta que lo pida | Hecho y publicado sin devoluciones (+ ruta 7b) |
-| 6 | Respuestas HTTP y falta de stock | **Siguiente** |
-| 7 | Analítica y conciliación | Pendiente |
+| 6 | Respuestas HTTP y falta de stock | Hecho y publicado (sin stock ahora es 409) |
+| 7 | Analítica y conciliación | **Siguiente** |
 | 8 | Validaciones adicionales y seguridad | Pendiente |
 
 ## Agenda de funciones nuevas (pedidas 2026-11-06, después del plan)

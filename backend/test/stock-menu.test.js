@@ -62,7 +62,7 @@ test('el submit rechaza con lenguaje humano (no un 409 crudo) y deja el pedido e
     () => orderSvc.submitOrder(T, o.id, { kind: 'staff', actorId: null }),
     (err) => {
       assert.equal(err.code, 'ITEM_UNAVAILABLE');
-      assert.equal(err.status, 200); // no es un 409
+      assert.equal(err.status, 409); // error real para el frontend; el texto sigue siendo humano
       assert.match(err.message, /agot|stock/i);
       assert.ok(!/409|conflict/i.test(err.message));
       return true;

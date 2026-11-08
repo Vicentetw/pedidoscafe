@@ -2,6 +2,12 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-07 — falla 6 (publicado)
+Sin stock respondía HTTP 200 con `{ error, code }`; Angular lo tomaba como éxito (el comensal veía el pedido como confirmado; la pantalla del mozo quedaba rota).
+- `orders.service.js`: `ITEM_UNAVAILABLE` (confirmar, agregar y subir cantidad) pasa de status 200 a 409. Mismo mensaje humano, mismo `code` y `details`.
+- `session-order-detail.ts`: "Enviar todos a cocina" ahora muestra los pedidos que no se enviaron y por qué (antes los callaba).
+- Test nuevo `stock-http-status.test.js` (HTTP, tenant 998975, 2 tests); `stock-menu.test.js` y `stock-reservation.test.js` ajustados de 200 a 409. Suite 310/310. Frontend compila. Sin migraciones.
+
 ## 2026-11-06 — falla 5 sin devoluciones + 7b (publicado)
 Devoluciones congeladas por el dueño: nada de esto mueve dinero.
 - `orders.service.js` `cancelOrder`: pedido ya cobrado → motivo obligatorio (422 sin motivo), el comensal no puede (403), auditoría `cancel_paid`.

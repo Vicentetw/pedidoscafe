@@ -13,7 +13,7 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 | 4 | La UI nunca manda `cashSessionId`: ventas fuera de la caja física; el backend aceptaba una caja de otra sucursal | Reproducido | Corregido (falla 4) |
 | 5 | Cancelar un pedido pagado no devuelve ni avisa; las devoluciones no revierten puntos | Reproducido / Código | Aviso + motivo + auditoría + conciliación (publicado). **Devolución y reversa de puntos: congeladas** |
 | 5b | `updateItem` en pedido confirmado no ajusta stock ni avisa a cocina; enmiendas `amend_paid` sin auditoría | Reproducido | Corregido (falla 5). Stock de ingredientes/recetas sigue sin ajustarse por ítem (limitación previa) |
-| 6 | Sin stock responde HTTP 200 con error; el frontend lo toma como éxito | Reproducido | Abierto |
+| 6 | Sin stock responde HTTP 200 con error; el frontend lo toma como éxito | Reproducido | Corregido: 409 con el mismo mensaje y code; "Enviar todos" avisa los no enviados |
 | 7 | Analítica: SPLIT no cuenta como venta, cancelados pagados sí | Reproducido | Abierto |
 | 7b | `/payments/reconciliation` tapada por `/:id` (500) y la UI oculta el error | Reproducido | Ruta corregida (con la falla 5). La UI todavía oculta errores de esa tarjeta |
 | 8 | Validaciones y seguridad (abajo) | Código | Abierto |

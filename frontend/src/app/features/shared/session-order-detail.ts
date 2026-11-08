@@ -197,7 +197,10 @@ export class SessionOrderDetail implements OnChanges {
     this.api.post<{ submitted: number[]; skipped: any[] }>(`/api/orders/sessions/${this.sessionId}/submit-all`, {}).subscribe({
       next: (r) => {
         this.submittingAll.set(false);
-        this.submitAllMsg.set(r.submitted.length ? `Listo — ${r.submitted.length} pedido(s) enviados a cocina.` : 'No había nada pendiente.');
+        const sent = r.submitted.length ? `Listo — ${r.submitted.length} pedido(s) enviados a cocina.` : (r.skipped?.length ? '' : 'No había nada pendiente.');
+        // Los que no se pudieron enviar (p. ej. sin stock) se avisan: antes quedaban callados.
+        const notSent = (r.skipped ?? []).map((s: any) => `${s.participant || 'Mostrador'}: ${s.reason}`).join(' · ');
+        this.submitAllMsg.set([sent, notSent ? `No se enviaron — ${notSent}` : ''].filter(Boolean).join(' '));
         this.load();
         this.changed.emit();
       },
