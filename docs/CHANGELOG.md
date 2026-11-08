@@ -2,6 +2,14 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-08 — falla 7 (publicado)
+Reportes de ventas.
+- `payments.service.js`: un pago SPLIT (montos sueltos, "partes iguales" o MP) que deja la mesa saldada marca todos sus pedidos como pagados (`markOrdersIfSessionSettled`). Antes esas ventas no aparecían en ningún reporte. Un SPLIT parcial sigue sin atribuirse a pedidos.
+- `analytics.repository.js`: venta = pagado y no cancelado (resumen, clientes repetidos, ranking y series diarias).
+- `payments-page.ts`: si Conciliación falla, la tarjeta muestra el error en vez de desaparecer (7b).
+- Test nuevo `analytics-sales-accuracy.test.js` (tenant 998945, 3 tests). Suite 313/313. Frontend compila. Sin migraciones.
+- Datos existentes: los pedidos de mesas ya cobradas con SPLIT siguen UNPAID y `daily_sales_rollup` guarda lo ya calculado; recalcular el rollup tras el deploy.
+
 ## 2026-11-07 — falla 6 (publicado)
 Sin stock respondía HTTP 200 con `{ error, code }`; Angular lo tomaba como éxito (el comensal veía el pedido como confirmado; la pantalla del mozo quedaba rota).
 - `orders.service.js`: `ITEM_UNAVAILABLE` (confirmar, agregar y subir cantidad) pasa de status 200 a 409. Mismo mensaje humano, mismo `code` y `details`.

@@ -14,8 +14,8 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 | 5 | Cancelar un pedido pagado no devuelve ni avisa; las devoluciones no revierten puntos | Reproducido / Código | Aviso + motivo + auditoría + conciliación (publicado). **Devolución y reversa de puntos: congeladas** |
 | 5b | `updateItem` en pedido confirmado no ajusta stock ni avisa a cocina; enmiendas `amend_paid` sin auditoría | Reproducido | Corregido (falla 5). Stock de ingredientes/recetas sigue sin ajustarse por ítem (limitación previa) |
 | 6 | Sin stock responde HTTP 200 con error; el frontend lo toma como éxito | Reproducido | Corregido: 409 con el mismo mensaje y code; "Enviar todos" avisa los no enviados |
-| 7 | Analítica: SPLIT no cuenta como venta, cancelados pagados sí | Reproducido | Abierto |
-| 7b | `/payments/reconciliation` tapada por `/:id` (500) y la UI oculta el error | Reproducido | Ruta corregida (con la falla 5). La UI todavía oculta errores de esa tarjeta |
+| 7 | Analítica: SPLIT no cuenta como venta, cancelados pagados sí | Reproducido | Corregido (falla 7). Pagos SPLIT viejos y `daily_sales_rollup` ya calculado no se corrigen solos: recalcular el rollup |
+| 7b | `/payments/reconciliation` tapada por `/:id` (500) y la UI oculta el error | Reproducido | Corregido: ruta (falla 5) y la tarjeta muestra el error (falla 7) |
 | 8 | Validaciones y seguridad (abajo) | Código | Abierto |
 
 ## Para el punto 8

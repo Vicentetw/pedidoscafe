@@ -105,6 +105,14 @@ async function markSessionOrdersPaid(tenantId, sessionId, participantId, conn) {
   }
 }
 
+// SPLIT no se atribuye a pedidos sueltos, pero cuando el pago deja la mesa
+// SALDADA, todos sus pedidos quedaron cubiertos: se marcan pagados. Sin
+// esto una mesa cobrada con cuenta dividida nunca contaba como venta en
+// los reportes (falla 7).
+async function markOrdersIfSessionSettled(tenantId, sessionId, sessionStatus, conn) {
+  if (sessionStatus === 'PAID') await markSessionOrdersPaid(tenantId, sessionId, null, conn);
+}
+
 function computeGroupAmountCents(session) {
   return toCents(session.total_amount) - toCents(session.paid_amount);
 }
@@ -206,8 +214,9 @@ async function chargeSession(tenantId, sessionId, input, actor) {
     await repo.addAllocation(tenantId, paymentId, { participantId: participantDbId, amount: fromCents(amountCents) }, conn);
 
     if (provider === 'CASH') {
-      await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId, actorId: actor.actorId });
+      const applied = await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId, actorId: actor.actorId });
       if (mode !== 'SPLIT') await markSessionOrdersPaid(tenantId, sessionId, participantDbId, conn);
+      else await markOrdersIfSessionSettled(tenantId, sessionId, applied.sessionStatus, conn);
       await enqueue(conn, { tenantId, branchId: session.branch_id, type: 'PaymentApproved', payload: { paymentId, sessionId } });
       return { done: true, paymentId, branchId: session.branch_id };
     }
@@ -275,7 +284,8 @@ async function splitEqual(tenantId, sessionId, parts, actor, requestedCashSessio
         amount: fromCents(amountCents), currency: session.currency, cashSessionId, createdBy: actor.actorId ?? null,
       }, conn);
       await repo.addAllocation(tenantId, paymentId, { amount: fromCents(amountCents) }, conn);
-      await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId, actorId: actor.actorId });
+      const applied = await settleCashPayment(tenantId, sessionId, paymentId, amountCents, conn, { cashSessionId, actorId: actor.actorId });
+      if (isLast) await markOrdersIfSessionSettled(tenantId, sessionId, applied.sessionStatus, conn);
       ids.push(paymentId);
     }
     await enqueue(conn, { tenantId, branchId: session.branch_id, type: 'PaymentApproved', payload: { sessionId, split: n } });
@@ -359,6 +369,7 @@ async function applyMpPaymentUpdate(tenantId, payment, real, conn) {
       const applied = await applyApprovedAmount(tenantId, payment.session_id, toCents(payment.amount), conn);
       sessionStatus = applied.sessionStatus;
       if (payment.kind !== 'SESSION_SPLIT') await markSessionOrdersPaid(tenantId, payment.session_id, payment.participant_id, conn);
+      else await markOrdersIfSessionSettled(tenantId, payment.session_id, applied.sessionStatus, conn);
       if (applied.overpayCents > 0) {
         await repo.createRefund(tenantId, payment.id, {
           amount: fromCents(applied.overpayCents), status: 'PENDING',

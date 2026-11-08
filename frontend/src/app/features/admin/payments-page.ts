@@ -62,6 +62,11 @@ const STATUS_LABEL: Record<string, string> = {
             <li title="Se cancelaron después de cobrarlos: el dinero sigue cobrado. Revisá cada caso con el cliente.">Pedidos cancelados ya cobrados (revisar): {{ rec.cancelledPaidOrders?.length ?? 0 }}</li>
           </ul>
         </div>
+      } @else if (reconciliationError()) {
+        <div class="card">
+          <h3>Conciliación</h3>
+          <p class="err small">{{ reconciliationError() }}</p>
+        </div>
       }
 
       <div class="cols">
@@ -236,6 +241,7 @@ export class PaymentsPage implements OnInit {
   readonly balance = signal<Balance | null>(null);
   readonly payments = signal<Payment[]>([]);
   readonly reconciliation = signal<any>(null);
+  readonly reconciliationError = signal('');
   readonly busy = signal(false);
   readonly checking = signal<number | null>(null);
   readonly error = signal('');
@@ -347,7 +353,12 @@ export class PaymentsPage implements OnInit {
       },
       error: (e) => this.fail(e, 'No se pudieron cargar las mesas.'),
     });
-    this.api.get<any>(`/api/payments/reconciliation?branchId=${id}`).subscribe({ next: (r) => this.reconciliation.set(r), error: () => this.reconciliation.set(null) });
+    // Si falla, se avisa en vez de esconder la tarjeta (antes desaparecía sin decir nada).
+    this.reconciliationError.set('');
+    this.api.get<any>(`/api/payments/reconciliation?branchId=${id}`).subscribe({
+      next: (r) => this.reconciliation.set(r),
+      error: (e) => { this.reconciliation.set(null); this.reconciliationError.set(e?.error?.error ?? 'No se pudo cargar la conciliación. Probá de nuevo en un momento.'); },
+    });
     if (this.mode() === 'historial') this.loadHistory();
     this.loadCash(); // al cambiar de sucursal, loadCash descarta la caja elegida de la otra
   }
