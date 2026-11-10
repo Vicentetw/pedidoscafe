@@ -25,7 +25,9 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 - `/api/stream` sin permiso: cualquier usuario del tenant ve eventos de pagos y de todas las sucursales.
 - `POST /analytics/rollup/recompute` escribe con permiso de lectura.
 - Job de reservas vencidas libera sin mirar el estado: un pedido entregado pasados 240 min no consume stock.
-- `domain_events` sin consumidores y sin purga (límite 10 MB).
+- ~~`domain_events` sin purga~~ corregido (purga diaria). **El plan de 10 MB alcanza para ~900 pedidos**: subir de plan antes de vender.
+- Pendiente: mesas abiertas indefinidamente (`orders.abandon_timeout_minutes` existe pero nada lo usa) y login del personal sin vencimiento. Dueño pidió tiempo y horario configurables.
+- Refund de MP (congelado) llama a la red con la conexión de la transacción abierta.
 - Propinas: backend sí, UI no; el checkout de MP no incluye la propina.
 - Puntos de fidelización sólo en cobros de mostrador, no en mesas.
 - Sin lock: `forceCloseSession`, `completeOrder`, `cash.addMovement`, `advanceTicket`.

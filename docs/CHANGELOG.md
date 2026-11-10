@@ -2,6 +2,14 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-10 — falla 8, parte 1: base de 10 MB y conexiones (publicado)
+Medido: el esquema vacío ocupa 4,23 MB y ~900 pedidos llenan los 10 MB (~6 KB por pedido); `domain_events` era la tabla más grande y nadie la lee.
+- `events/outbox.js` `purgeDispatched`: borra eventos ya despachados con más de 7 días, de a lotes; nunca los no despachados.
+- `jobs/purgeDomainEvents.js`: la corre 1 min después de arrancar y cada 6 h (Render puede dormir el servicio).
+- `server.js`: el despacho del outbox pasa de cada 1 s a cada 10 s (sin consumidores; libera la conexión).
+- `inventory.service.js` `adjustStock`: la auditoría usa la conexión de la transacción. Antes pedía una 2ª conexión: con 3 ajustes simultáneos (límite 3) el backend se colgaba. Encontrado corriendo la suite con `DB_CONNECTION_LIMIT=1`: fue el único caso.
+- Test nuevo `domain-events-purge.test.js` (tenant 998925, 2 tests). Suite 315/315. Sin migraciones. Sin cambios de frontend.
+
 ## 2026-11-08 — falla 7 (publicado)
 Reportes de ventas.
 - `payments.service.js`: un pago SPLIT (montos sueltos, "partes iguales" o MP) que deja la mesa saldada marca todos sus pedidos como pagados (`markOrdersIfSessionSettled`). Antes esas ventas no aparecían en ningún reporte. Un SPLIT parcial sigue sin atribuirse a pedidos.

@@ -22,3 +22,6 @@
 - Interceptor del frontend con sesión de staff + comensal en el mismo navegador.
 - Reserva vencida de un pedido entregado tarde.
 - CI que corra la suite antes de llegar a `main`.
+
+## Detector de conexiones anidadas
+Correr la suite con `DB_CONNECTION_LIMIT=1 node --test --test-concurrency=1 --test-timeout=20000`: un test colgado indica código que pide una 2ª conexión dentro de una transacción (en producción, con límite 3, cuelga el backend). Al 2026-11-10 el único caso era `adjustStock` (corregido).

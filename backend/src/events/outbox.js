@@ -57,9 +57,30 @@ function startOutboxWorker({ intervalMs = 1000 } = {}) {
   logger.info('outbox_worker_started', { intervalMs });
 }
 
+// Borra eventos YA despachados con más de `olderThanDays` días. Hoy nadie
+// lee domain_events después del despacho y la tabla era la que más crecía
+// (base de 10 MB). Nunca toca los no despachados. Borra de a lotes para no
+// tener la tabla tomada mucho tiempo.
+async function purgeDispatched({ olderThanDays = 7, batchSize = 1000, maxBatches = 50 } = {}) {
+  let total = 0;
+  for (let i = 0; i < maxBatches; i++) {
+    const [r] = await pool.query(
+      `DELETE FROM domain_events
+        WHERE dispatched_at IS NOT NULL
+          AND dispatched_at < (CURRENT_TIMESTAMP(3) - INTERVAL :days DAY)
+        ORDER BY id
+        LIMIT :batchSize`,
+      { days: Number(olderThanDays), batchSize: Number(batchSize) }
+    );
+    total += r.affectedRows;
+    if (r.affectedRows < batchSize) break;
+  }
+  return total;
+}
+
 function stopOutboxWorker() {
   if (timer) clearInterval(timer);
   timer = null;
 }
 
-module.exports = { enqueue, dispatchOnce, startOutboxWorker, stopOutboxWorker };
+module.exports = { enqueue, dispatchOnce, purgeDispatched, startOutboxWorker, stopOutboxWorker };

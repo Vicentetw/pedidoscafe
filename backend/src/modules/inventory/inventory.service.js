@@ -80,7 +80,7 @@ async function adjustStock(tenantId, branchId, { ingredientCode, newOnHand, wast
     await writeAudit({
       req, tenantId, branchId, entityType: 'stock', entityId: `${branchId}:${ing.id}`,
       action: waste ? 'waste' : 'adjust', before: { qty_on_hand: cur }, after: { qty_on_hand: Number(newOnHand) }, reason,
-    });
+    }, conn); // misma conexión: sin `conn` pedía una 2ª al pool estando en la transacción (con 3 conexiones, 3 ajustes a la vez colgaban todo)
     return (await repo.listStock(tenantId, branchId, conn)).find((s) => s.ingredient_id === ing.id);
   });
 }

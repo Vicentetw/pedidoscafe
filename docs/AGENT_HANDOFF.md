@@ -1,10 +1,10 @@
 # Handoff para el próximo agente
 
-Última actualización: 2026-11-08 · falla 7 publicada.
+Última actualización: 2026-11-10 · falla 8 parte 1 publicada.
 
 ## Estado
 - Producción arriba: backend `https://pedidoscafe.onrender.com`, frontend `restiapedidos.web.app`. El dueño aún no lo usa con clientes reales.
-- Suite backend: 313 tests (58 archivos), 313/313 con Firebase simulado.
+- Suite backend: 315 tests (59 archivos), 315/315 con Firebase simulado.
 - Falla 2 y `docs/` publicados en `main`.
 - Auditoría completa de solo lectura hecha el 2026-11-03; hallazgos en `KNOWN_ISSUES.md`.
 
@@ -18,7 +18,7 @@
 | 5 | Cancelaciones, devoluciones y saldos. **Devoluciones congeladas por decisión del dueño (2026-11-06)**: no tocar `refundPayment` ni el refund de MP hasta que lo pida | Hecho y publicado sin devoluciones (+ ruta 7b) |
 | 6 | Respuestas HTTP y falta de stock | Hecho y publicado (sin stock ahora es 409) |
 | 7 | Analítica y conciliación | Hecho y publicado |
-| 8 | Validaciones adicionales y seguridad | **Siguiente**. Prioridad del dueño: purga de `domain_events` (límite 10 MB) y seguridad del comensal |
+| 8 | Validaciones adicionales y seguridad | **En curso**. Parte 1 (purga, outbox 10 s, conexión anidada) hecha. Siguen: mesas y login configurables, seguridad del comensal, sesiones mezcladas, `/api/stream`, permisos/locks |
 
 ## Agenda de funciones nuevas (pedidas 2026-11-06, después del plan)
 1. **Imágenes de productos.** La DB ya tiene `products.image_url` y el backend lo acepta, pero no hay subida ni se muestra en ninguna pantalla. No guardar imágenes en MySQL (límite 10 MB) ni en disco de Render (se borra). Propuesta: Firebase Storage.

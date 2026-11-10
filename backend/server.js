@@ -4,6 +4,7 @@ const { logger } = require('./src/logger');
 const { initFirebaseAdmin } = require('./src/auth/firebase');
 const { startOutboxWorker, stopOutboxWorker } = require('./src/events/outbox');
 const releaseExpired = require('./src/jobs/releaseExpiredReservations');
+const purgeEvents = require('./src/jobs/purgeDomainEvents');
 const { closeAll: closeSse } = require('./src/http/sse');
 const pool = require('./src/db');
 
@@ -34,13 +35,17 @@ async function main() {
     if (!config.apiKey) logger.warn('api_key_not_set', { note: 'las rutas del staff no exigen x-api-key' });
   });
 
-  startOutboxWorker({ intervalMs: 1000 });
+  // 10 s (antes 1 s): nadie escucha estos eventos todavía y, con 3
+  // conexiones a la base, consultar cada segundo no aporta nada.
+  startOutboxWorker({ intervalMs: 10000 });
   releaseExpired.start({ intervalMs: 60000 });
+  purgeEvents.start();
 
   const shutdown = (signal) => {
     logger.info('shutdown', { signal });
     stopOutboxWorker();
     releaseExpired.stop();
+    purgeEvents.stop();
     closeSse();
     server.close(() => pool.end().then(() => process.exit(0)));
     setTimeout(() => process.exit(1), 10000).unref();
