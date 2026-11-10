@@ -60,6 +60,9 @@ const STATUS_LABEL: Record<string, string> = {
             <li>Mesas cerradas por la fuerza con saldo: {{ rec.forceClosedWithBalance.length }}</li>
             <li>Devoluciones pendientes: {{ rec.pendingRefunds.length }}</li>
             <li title="Se cancelaron después de cobrarlos: el dinero sigue cobrado. Revisá cada caso con el cliente.">Pedidos cancelados ya cobrados (revisar): {{ rec.cancelledPaidOrders?.length ?? 0 }}</li>
+            <li title="Mesas con saldo sin cobrar y sin movimiento hace rato. No se cierran solas: cobralas, cerralas o marcalas como ocupadas desde Mesas.">Mesas con cuenta colgada: {{ rec.staleSessions?.length ?? 0 }}
+              @for (m of rec.staleSessions ?? []; track m.id) { <span class="badge badge-danger">Mesa {{ m.table_code }}</span> }
+            </li>
           </ul>
         </div>
       } @else if (reconciliationError()) {

@@ -568,6 +568,8 @@ async function getReconciliation(tenantId, branchId, { staleMinutes = 30 } = {})
     forceClosedWithBalance: forceClosedRes[0],
     pendingRefunds: refundsRes[0],
     cancelledPaidOrders: cancelledPaidRes[0],
+    // Mesas con saldo y sin actividad ("colgadas", falla 8 parte 2A).
+    staleSessions: await require('../tables/tables.service').listStaleSessions(tenantId, branchId),
   };
 }
 

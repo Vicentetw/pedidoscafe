@@ -90,6 +90,49 @@ interface Branch { id: number; name: string; }
         </div>
       </div>
 
+      <div class="card toggle-card">
+        <div class="toggle-row">
+          <div>
+            <h3>Mesas: cierre automático</h3>
+            <p class="muted small">
+              Libera y cierra solas las mesas que ya no tienen nada pendiente, para que el próximo
+              cliente que escanee el QR empiece una cuenta nueva. <strong>Una mesa con saldo sin cobrar
+              nunca se cierra sola</strong>: queda marcada como "cuenta colgada" en Mesas y en Caja, y
+              nadie nuevo puede sumarse a esa cuenta por QR hasta que alguien la revise.
+            </p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" [ngModel]="hkEnabled()" (ngModelChange)="saveKey('tables.housekeeping_enabled', $event)" [disabled]="saving()" />
+            <span class="slider"></span>
+          </label>
+        </div>
+        <div class="hk-grid">
+          <label class="small">Mesa sin consumo (escanearon y no pidieron nada): se libera tras
+            <input type="number" min="5" max="720" [(ngModel)]="autoRelease" style="width:70px" /> min sin movimiento
+          </label>
+          <label class="small">Mesa ya cobrada por completo: se cierra tras
+            <input type="number" min="5" max="720" [(ngModel)]="paidClose" style="width:70px" /> min sin movimiento
+            <span class="muted">(nunca si cocina tiene algo pendiente o hay un pago de MercadoPago en curso)</span>
+          </label>
+          <label class="small">Mesa con saldo: se marca como "cuenta colgada" tras
+            <input type="number" min="1" max="48" [(ngModel)]="staleHours" style="width:60px" /> h sin movimiento
+          </label>
+          <label class="small">Hora de cierre del día:
+            <select [(ngModel)]="dayCloseHour">
+              <option [ngValue]="null">Sin cierre del día</option>
+              @for (h of hours; track h) { <option [ngValue]="h">{{ h < 10 ? '0' + h : h }}:00</option> }
+            </select>
+            <span class="muted">a esa hora se liberan/cierran las mesas sin pendientes y se marcan las que tienen saldo, sin esperar los minutos.</span>
+          </label>
+        </div>
+        <div class="row"><button [disabled]="saving()" (click)="saveHousekeeping()">Guardar</button></div>
+        @if (branchId() === null) {
+          <p class="muted small hint">Esto se está guardando a nivel EMPRESA — aplica a todas las sucursales que no tengan su propio valor.</p>
+        } @else {
+          <p class="muted small hint">Esto se está guardando sólo para esta sucursal.</p>
+        }
+      </div>
+
       <div class="card">
         <h3>Otros valores (avanzado)</h3>
         @if (entries().length) {
@@ -114,6 +157,7 @@ interface Branch { id: number; name: string; }
     .hint { margin: 0; }
     ul { padding-left: 18px; }
     .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .hk-grid { display: flex; flex-direction: column; gap: 8px; }
 
     .switch { position: relative; display: inline-block; width: 44px; height: 26px; flex-shrink: 0; }
     .switch input { opacity: 0; width: 0; height: 0; }
@@ -144,9 +188,40 @@ export class SettingsPage implements OnInit {
   private readonly STALE_KEY = 'orders.abandon_timeout_minutes';
   staleMinutes = 120;
   private readonly MOZO_KEY = 'staff.mozo_can_charge';
+  // Mantenimiento de mesas (backend: tables.housekeeping.js). Mismos defaults que el backend.
+  private readonly HK_KEYS = ['tables.housekeeping_enabled', 'tables.auto_release_minutes', 'tables.paid_autoclose_minutes', 'tables.stale_hours', 'tables.day_close_hour'];
+  readonly hkEnabled = signal(true);
+  autoRelease = 60;
+  paidClose = 30;
+  staleHours = 3;
+  dayCloseHour: number | null = 4;
+  readonly hours = Array.from({ length: 24 }, (_, i) => i);
 
   entries() {
-    return Object.entries(this.data()).filter(([k]) => k !== this.KEY && k !== this.STALE_KEY && k !== this.MOZO_KEY);
+    return Object.entries(this.data()).filter(([k]) => k !== this.KEY && k !== this.STALE_KEY && k !== this.MOZO_KEY && !this.HK_KEYS.includes(k));
+  }
+  saveKey(key: string, value: unknown, done?: () => void) {
+    this.error.set(''); this.msg.set('');
+    this.saving.set(true);
+    const q = this.branchId() != null ? `?branchId=${this.branchId()}` : '';
+    this.api.put(`/api/platform/settings/${key}${q}`, { value }).subscribe({
+      next: () => { this.saving.set(false); if (done) done(); else { this.msg.set('Guardado.'); this.load(); } },
+      error: (e) => { this.error.set(e?.error?.error ?? 'No se pudo guardar.'); this.saving.set(false); },
+    });
+  }
+  // Una clave por vez, en orden; si una falla, se corta y se ve el error.
+  saveHousekeeping() {
+    const pairs: [string, unknown][] = [
+      ['tables.auto_release_minutes', Number(this.autoRelease)],
+      ['tables.paid_autoclose_minutes', Number(this.paidClose)],
+      ['tables.stale_hours', Number(this.staleHours)],
+      ['tables.day_close_hour', this.dayCloseHour],
+    ];
+    const next = (i: number) => {
+      if (i >= pairs.length) { this.msg.set('Guardado.'); this.load(); return; }
+      this.saveKey(pairs[i][0], pairs[i][1], () => next(i + 1));
+    };
+    next(0);
   }
   toggleMozoCharge(value: boolean) {
     this.error.set(''); this.msg.set('');
@@ -191,6 +266,12 @@ export class SettingsPage implements OnInit {
         this.mozoCanCharge.set(r.data[this.MOZO_KEY] === true);
         const stale = r.data[this.STALE_KEY];
         this.staleMinutes = typeof stale === 'number' ? stale : 120;
+        const d = r.data;
+        this.hkEnabled.set(typeof d['tables.housekeeping_enabled'] === 'boolean' ? d['tables.housekeeping_enabled'] as boolean : true);
+        this.autoRelease = typeof d['tables.auto_release_minutes'] === 'number' ? d['tables.auto_release_minutes'] as number : 60;
+        this.paidClose = typeof d['tables.paid_autoclose_minutes'] === 'number' ? d['tables.paid_autoclose_minutes'] as number : 30;
+        this.staleHours = typeof d['tables.stale_hours'] === 'number' ? d['tables.stale_hours'] as number : 3;
+        this.dayCloseHour = d['tables.day_close_hour'] === null ? null : typeof d['tables.day_close_hour'] === 'number' ? d['tables.day_close_hour'] as number : 4;
         this.loading.set(false);
       },
       error: (e) => {

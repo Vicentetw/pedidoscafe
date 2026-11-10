@@ -1,7 +1,9 @@
 const repo = require('./tables.repository');
 const branchRepo = require('../platform/branches.repository');
 const settingsRepo = require('../platform/settings.repository');
-const { assertTransition, TERMINAL } = require('./tableSession.stateMachine');
+const { assertTransition, canTransition, TERMINAL } = require('./tableSession.stateMachine');
+const housekeeping = require('./tables.housekeeping');
+const { logger } = require('../../logger');
 const { withTransaction } = require('../../withTransaction');
 const { issueTableSessionToken } = require('../../auth/sessionToken');
 const { enqueue } = require('../../events/outbox');
@@ -83,7 +85,89 @@ async function openSessionFromSalon(tenantId, { tableId, assignSelfAsWaiter }, r
 }
 
 async function listOpenSessions(tenantId, branchId) {
-  return repo.listOpenSessions(tenantId, branchId || null);
+  const rows = await repo.listOpenSessions(tenantId, branchId || null);
+  return attachStale(tenantId, rows);
+}
+
+// Agrega `idleMinutes` y `stale` ("mesa colgada", ver tables.housekeeping.js)
+// a cada sesión. Campos nuevos: los que ya existían no cambian.
+async function attachStale(tenantId, rows) {
+  const policies = new Map();
+  const tzs = new Map();
+  const now = new Date();
+  for (const r of rows) {
+    if (!policies.has(r.branch_id)) {
+      policies.set(r.branch_id, await housekeeping.getPolicy(tenantId, r.branch_id));
+      tzs.set(r.branch_id, (await branchRepo.findById(tenantId, r.branch_id))?.timezone);
+    }
+    const idle = Number(r.idle_minutes ?? 0);
+    r.idleMinutes = idle;
+    r.stale = housekeeping.isStale(r, idle, policies.get(r.branch_id), tzs.get(r.branch_id), now);
+    delete r.idle_minutes;
+  }
+  return rows;
+}
+
+// Mesas con saldo y sin actividad — para Conciliación.
+async function listStaleSessions(tenantId, branchId) {
+  return (await listOpenSessions(tenantId, branchId)).filter((s) => s.stale);
+}
+
+// "Reactivar": el mozo confirma que la mesa sigue ocupada. Deja de estar
+// colgada y vuelve a aceptar gente nueva por QR.
+async function reactivateSession(tenantId, sessionId, req) {
+  const s = await repo.findSessionById(tenantId, sessionId);
+  if (!s) throw new NotFoundError('Esa sesión no existe.');
+  if (TERMINAL.has(s.status)) throw new ConflictError('Esa mesa ya está cerrada.');
+  await repo.touchSession(tenantId, sessionId);
+  await writeAudit({ req, tenantId, branchId: s.branch_id, entityType: 'table_session', entityId: sessionId, action: 'reactivate' });
+  publish({ tenantId, branchId: s.branch_id, topic: 'tables', event: 'session_updated', data: { sessionId } });
+  return staffSessionView(tenantId, sessionId);
+}
+
+// Cierre automático de UNA mesa (lo llama runHousekeeping). Todo se
+// re-verifica con la fila lockeada: si algo cambió (entró un pedido, un
+// pago), no se cierra. Devuelve 'released' | 'closed' | null.
+async function autoFinishSession(tenantId, sessionId) {
+  const done = await withTransaction(async (conn) => {
+    const cur = await repo.lockSession(tenantId, sessionId, conn);
+    if (!cur || TERMINAL.has(cur.status)) return null;
+    const branch = await branchRepo.findById(tenantId, cur.branch_id, conn);
+    const policy = await housekeeping.getPolicy(tenantId, cur.branch_id, conn);
+    const facts = await repo.housekeepingFacts(tenantId, sessionId, conn);
+    const decision = housekeeping.decideAutoFinish(cur, facts, policy, branch?.timezone);
+    if (!decision) return null;
+    let target = decision.kind === 'release' && canTransition(cur.status, 'ABANDONED') ? 'ABANDONED' : 'CLOSED';
+    if (target === 'CLOSED' && cur.status !== 'PAID' && !canTransition(cur.status, 'CLOSED')) return null;
+    const reason = decision.kind === 'release'
+      ? `Automático: sin consumo y sin actividad (${facts.idleMinutes} min)`
+      : `Automático: cuenta saldada y sin actividad (${facts.idleMinutes} min)`;
+    await repo.setSessionStatus(tenantId, sessionId, target, { closeReason: reason, closed: true }, conn);
+    await repo.setTableStatus(tenantId, cur.table_id, 'FREE', null, conn);
+    await enqueue(conn, { tenantId, branchId: cur.branch_id, type: 'TableSessionClosed', payload: { sessionId, reason: target === 'ABANDONED' ? 'auto_released' : 'auto_closed' } });
+    return { cur, target, reason };
+  });
+  if (!done) return null;
+  await writeAudit({ req: null, tenantId, branchId: done.cur.branch_id, entityType: 'table_session', entityId: sessionId, action: done.target === 'ABANDONED' ? 'auto_release' : 'auto_close', before: { status: done.cur.status }, reason: done.reason });
+  publish({ tenantId, branchId: done.cur.branch_id, topic: 'tables', event: 'session_closed', data: { sessionId, tableId: done.cur.table_id, auto: true } });
+  return done.target === 'ABANDONED' ? 'released' : 'closed';
+}
+
+// Recorre las mesas abiertas sin saldo y cierra las que corresponda.
+// Las mesas con saldo no se tocan (sólo se marcan al listarlas).
+async function runHousekeeping() {
+  const rows = await repo.listHousekeepingCandidates();
+  const out = { released: 0, closed: 0 };
+  for (const r of rows) {
+    if (housekeeping.hasBalance(r)) continue;
+    try {
+      const res = await autoFinishSession(r.tenant_id, r.id);
+      if (res) out[res] += 1;
+    } catch (err) {
+      logger.error('table_housekeeping_failed', { sessionId: r.id, message: err.message });
+    }
+  }
+  return out;
 }
 
 async function staffSessionView(tenantId, sessionId) {
@@ -206,6 +290,18 @@ async function startSession(token, input, req) {
     }
     if (TERMINAL.has(session.status)) {
       throw new ConflictError('Esta mesa se cerró recién. Volvé a escanear el código.');
+    }
+    // Mesa "colgada" (saldo sin cobrar y sin actividad): alguien nuevo no
+    // entra a la cuenta vieja — antes el próximo cliente veía (y podía
+    // pagar) lo del grupo anterior. El mozo la cobra, la cierra o la
+    // reactiva si la mesa sigue ocupada.
+    if (!isNew) {
+      const policy = await housekeeping.getPolicy(tenantId, branchId, conn);
+      const idle = await repo.sessionIdleMinutes(tenantId, session.id, conn);
+      const branch = await branchRepo.findById(tenantId, branchId, conn);
+      if (housekeeping.isStale(session, idle, policy, branch?.timezone)) {
+        throw new ConflictError('Esta mesa quedó con una cuenta anterior sin cerrar. Llamá al mozo para que la revise.', { code: 'SESSION_STALE' });
+      }
     }
 
     // Nombre repetido en la misma mesa: no sumar un duplicado silencioso
@@ -371,7 +467,8 @@ async function setOrderMode(scope, mode) {
 
 module.exports = {
   listTables, getTable, createTable, updateTable, deleteTable, rotateQr,
-  openSessionFromSalon, listOpenSessions, staffSessionView, assignWaiter, closeSession, forceCloseSession,
+  openSessionFromSalon, listOpenSessions, listStaleSessions, reactivateSession, autoFinishSession, runHousekeeping,
+  staffSessionView, assignWaiter, closeSession, forceCloseSession,
   resolveQr, startSession, getGuestSession, addGuestParticipant, removeGuestParticipant, setOrderMode,
   publicSessionView,
 };

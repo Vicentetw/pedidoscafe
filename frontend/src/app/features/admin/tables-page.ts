@@ -14,6 +14,7 @@ interface Table {
 interface OpenSession {
   id: number; public_id: string; table_id: number; table_code: string; status: string;
   order_mode: string; participant_count: number; opened_at: string;
+  stale?: boolean; idleMinutes?: number; // "mesa colgada" (backend: tables.housekeeping.js)
 }
 
 const STATUS_BADGE: Record<string, string> = { FREE: 'badge-success', OCCUPIED: 'badge-warning', RESERVED: 'badge-info' };
@@ -89,16 +90,25 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
               <button class="srow" [class.sel]="openSession() === s.id" (click)="toggleSession(s)">
                 <span><strong>Mesa {{ s.table_code }}</strong> · {{ s.status }} · {{ s.order_mode }} · {{ s.participant_count }} persona(s)
                   @if (isStale(s)) { <span class="badge badge-warning">⏱ hace {{ openMinutes(s) }} min</span> }
+                  @if (s.stale) { <span class="badge badge-danger" title="Tiene saldo sin cobrar y nadie la movió hace rato. Nadie nuevo puede sumarse por QR hasta que la revises.">⚠ Cuenta colgada · sin movimiento hace {{ idleLabel(s) }}</span> }
                 </span>
                 <span class="chev">{{ openSession() === s.id ? '▲' : '▼' }}</span>
               </button>
               @if (openSession() === s.id) {
                 <div class="detail">
+                  @if (s.stale) {
+                    <p class="stale-help">
+                      ⚠ Esta mesa tiene saldo sin cobrar y no tuvo movimiento hace {{ idleLabel(s) }}.
+                      Mientras siga así, si alguien escanea el QR <strong>no entra</strong> a esta cuenta (para que no vea ni pague lo de otro grupo).
+                      Cobrala o cerrala; si la gente sigue sentada, tocá <strong>Sigue ocupada</strong>.
+                    </p>
+                  }
                   <app-session-order-detail [sessionId]="s.id" (changed)="loadSessions()" />
                   <div class="row">
                     @if (canCharge()) {
                       <a class="cash-link" [routerLink]="['/admin/caja']" [queryParams]="{ branchId: branchId(), sessionId: s.id }">💳 Cobrar en Caja</a>
                     }
+                    @if (s.stale) { <button (click)="reactivate(s)" title="La mesa sigue ocupada: saca el aviso y vuelve a dejar entrar por QR.">Sigue ocupada</button> }
                     <button (click)="close(s)">Cerrar</button>
                     @if (canForceClose()) { <button class="danger" (click)="forceClose(s)">Cierre forzado</button> }
                   </div>
@@ -116,6 +126,7 @@ const STATUS_LABEL: Record<string, string> = { FREE: 'Libre', OCCUPIED: 'Ocupada
     }
   `,
   styles: [`
+    .stale-help { background: var(--danger-soft); color: var(--danger); padding: 8px 10px; border-radius: var(--radius-2, 8px); font-size: .9rem; margin: 0 0 8px; }
     .card { margin-bottom: var(--space-4); }
     .row { display:flex; gap:8px; flex-wrap:wrap; margin-top:10px; }
     .row input { max-width: 160px; }
@@ -159,6 +170,16 @@ export class TablesPage implements OnInit, OnDestroy {
   private staleMinutes = 120;
 
   isStale(s: OpenSession) { return this.openMinutes(s) >= this.staleMinutes; }
+  idleLabel(s: OpenSession) {
+    const m = s.idleMinutes ?? 0;
+    return m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+  }
+  reactivate(s: OpenSession) {
+    this.api.post(`/api/tables/sessions/${s.id}/reactivate`, {}).subscribe({
+      next: () => this.loadSessions(),
+      error: (e) => this.fail(e, 'No se pudo reactivar la mesa.'),
+    });
+  }
   openMinutes(s: OpenSession) { return Math.floor((Date.now() - new Date(s.opened_at).getTime()) / 60000); }
 
   nc = ''; nn = ''; ns: number | null = null;

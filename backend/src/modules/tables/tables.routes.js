@@ -42,6 +42,9 @@ router.put('/sessions/:id/waiter', requirePermission('tables:assign_waiter'), as
 }));
 router.post('/sessions/:id/close', openSess, asyncHandler(async (req, res) =>
   res.json(await svc.closeSession(req.tenantId, +req.params.id, req))));
+// "Sigue ocupada": saca la marca de mesa colgada (ver tables.housekeeping.js).
+router.post('/sessions/:id/reactivate', openSess, asyncHandler(async (req, res) =>
+  res.json(await svc.reactivateSession(req.tenantId, +req.params.id, req))));
 router.post('/sessions/:id/force-close', requirePermission('tables:force_close'), asyncHandler(async (req, res) => {
   const { reason } = s.closeSession.parse(req.body);
   res.json(await svc.forceCloseSession(req.tenantId, +req.params.id, reason, req));

@@ -5,6 +5,7 @@ const { initFirebaseAdmin } = require('./src/auth/firebase');
 const { startOutboxWorker, stopOutboxWorker } = require('./src/events/outbox');
 const releaseExpired = require('./src/jobs/releaseExpiredReservations');
 const purgeEvents = require('./src/jobs/purgeDomainEvents');
+const tableHousekeeping = require('./src/jobs/tableHousekeeping');
 const { closeAll: closeSse } = require('./src/http/sse');
 const pool = require('./src/db');
 
@@ -40,12 +41,14 @@ async function main() {
   startOutboxWorker({ intervalMs: 10000 });
   releaseExpired.start({ intervalMs: 60000 });
   purgeEvents.start();
+  tableHousekeeping.start();
 
   const shutdown = (signal) => {
     logger.info('shutdown', { signal });
     stopOutboxWorker();
     releaseExpired.stop();
     purgeEvents.stop();
+    tableHousekeeping.stop();
     closeSse();
     server.close(() => pool.end().then(() => process.exit(0)));
     setTimeout(() => process.exit(1), 10000).unref();

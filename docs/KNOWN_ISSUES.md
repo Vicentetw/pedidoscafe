@@ -39,6 +39,10 @@ Numeración = orden del plan de corrección. "Reproducido" = probado por HTTP el
 - No hay pantalla para cobrar pedidos de mostrador (`POST /payments/orders/:id/charge` existe, ninguna UI lo llama).
 - Un mozo con `staff.mozo_can_charge` no tiene `cash:view`: no ve las cajas; con una sola abierta funciona, con varias no puede elegir.
 
+## Vistos durante la falla 8 (no corregidos)
+- `settings.repository.get()` devuelve el valor de EMPRESA aunque la sucursal tenga uno propio (orden invertido). `getAll()` está bien. El código nuevo usa `getAll`.
+- 2026-11-10: con Docker apagado y el archivo de entorno de prueba borrado, una corrida de test arrancó con el `.env` real (MySQL local de 3307) y se cortó; pudo dejar filas del tenant de prueba 998915 en esa base local. Por eso existe `scripts/test-local.sh`.
+
 ## No cambiar sin decisión explícita
 - Sin caja abierta no se cobra en efectivo (decidido 2026-11-05).
 - Staff puede cancelar pedidos en mesa cerrada.

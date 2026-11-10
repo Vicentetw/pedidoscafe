@@ -4,7 +4,10 @@
 - Backend: `node --test --test-concurrency=1`, 51 archivos, 283 tests contra MySQL real. Cubre aislamiento por empresa, RBAC, máquinas de estado, flujos de pedido/cocina/pago/webhook, stock, caja, promos, fidelización, fiscal, mesa cerrada.
 - Frontend: **0 tests**. Sin e2e. Sin CI.
 
-## Cómo correr sin riesgo
+## Cómo correr sin riesgo (forma corta)
+`bash backend/scripts/test-local.sh` (suite) o `bash backend/scripts/test-local.sh test/x.test.js`. Levanta el MySQL descartable, simula Firebase (`test/support/fake-firebase.js`), bloquea red externa, aborta si la base no es la descartable y borra el contenedor al final. Necesita Docker Desktop encendido.
+
+## Cómo correr sin riesgo (a mano)
 1. MySQL descartable: `docker run -d --name pc-test -p 127.0.0.1:33178:3306 -e MYSQL_ROOT_PASSWORD=x -e MYSQL_DATABASE=pc_test mysql:8.0`
 2. Variables (dotenv no pisa las ya definidas):
    `DB_HOST=127.0.0.1 DB_PORT=33178 DB_USER=root DB_PASSWORD=x DB_NAME=pc_test`

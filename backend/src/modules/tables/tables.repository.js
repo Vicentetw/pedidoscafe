@@ -190,12 +190,62 @@ async function assignWaiter(tenantId, id, waiterUserId, conn = pool) {
 async function touchSession(tenantId, id, conn = pool) {
   await conn.query(`UPDATE table_sessions SET last_activity_at = CURRENT_TIMESTAMP WHERE tenant_id = :tenantId AND id = :id`, { tenantId, id });
 }
+// Mantenimiento de mesas (tables.housekeeping.js). Actividad = lo último
+// que se movió: la fila de la mesa o cualquiera de sus pedidos. Los minutos
+// se calculan en SQL contra CURRENT_TIMESTAMP: inmune a la zona horaria.
+const ACTIVITY_SQL = `GREATEST(s.last_activity_at,
+  COALESCE((SELECT MAX(o.updated_at) FROM orders o WHERE o.session_id = s.id), s.last_activity_at))`;
+
+async function listHousekeepingCandidates(limit = 500, conn = pool) {
+  const [rows] = await conn.query(
+    `SELECT s.id, s.tenant_id, s.branch_id, s.table_id, s.status, s.total_amount, s.paid_amount,
+            b.timezone,
+            TIMESTAMPDIFF(MINUTE, ${ACTIVITY_SQL}, CURRENT_TIMESTAMP) AS idle_minutes
+       FROM table_sessions s JOIN branches b ON b.id = s.branch_id
+      WHERE s.status IN ('OPEN','ORDERING','SERVING','BILL_REQUESTED','PARTIALLY_PAID','PAID')
+      ORDER BY s.id
+      LIMIT :limit`,
+    { limit: Number(limit) }
+  );
+  return rows;
+}
+
+// Lo que se re-verifica con la mesa YA lockeada antes de cerrarla sola.
+async function housekeepingFacts(tenantId, sessionId, conn = pool) {
+  const [[row]] = await conn.query(
+    `SELECT
+       (SELECT COUNT(*) FROM orders o WHERE o.tenant_id = :tenantId AND o.session_id = :sessionId
+           AND o.status IN ('CONFIRMED','QUEUED','PREPARING','READY','DELIVERED','COMPLETED','CANCEL_REQUESTED')) AS consumed_orders,
+       (SELECT COUNT(*) FROM orders o WHERE o.tenant_id = :tenantId AND o.session_id = :sessionId
+           AND o.status IN ('SUBMITTED','VALIDATING_STOCK','CONFIRMED','QUEUED','PREPARING','READY','CANCEL_REQUESTED')) AS kitchen_pending,
+       (SELECT COUNT(*) FROM payments p WHERE p.tenant_id = :tenantId AND p.session_id = :sessionId
+           AND p.status IN ('CREATED','PENDING')) AS payments_in_flight,
+       (SELECT TIMESTAMPDIFF(MINUTE, ${ACTIVITY_SQL}, CURRENT_TIMESTAMP) FROM table_sessions s
+         WHERE s.tenant_id = :tenantId AND s.id = :sessionId) AS idle_minutes`,
+    { tenantId, sessionId }
+  );
+  return {
+    consumedOrders: Number(row.consumed_orders), kitchenPending: Number(row.kitchen_pending),
+    paymentsInFlight: Number(row.payments_in_flight), idleMinutes: Number(row.idle_minutes),
+  };
+}
+
+async function sessionIdleMinutes(tenantId, sessionId, conn = pool) {
+  const [[row]] = await conn.query(
+    `SELECT TIMESTAMPDIFF(MINUTE, ${ACTIVITY_SQL}, CURRENT_TIMESTAMP) AS idle FROM table_sessions s
+      WHERE s.tenant_id = :tenantId AND s.id = :sessionId`,
+    { tenantId, sessionId }
+  );
+  return row ? Number(row.idle) : 0;
+}
+
 async function listOpenSessions(tenantId, branchId, conn = pool) {
   const [rows] = await conn.query(
     `SELECT s.id, s.public_id, s.tenant_id, s.branch_id, s.table_id, s.status, s.order_mode,
             s.total_amount, s.paid_amount, s.currency, s.waiter_user_id, s.opened_at,
             t.code AS table_code,
-            (SELECT COUNT(*) FROM session_participants p WHERE p.session_id = s.id AND p.left_at IS NULL) AS participant_count
+            (SELECT COUNT(*) FROM session_participants p WHERE p.session_id = s.id AND p.left_at IS NULL) AS participant_count,
+            TIMESTAMPDIFF(MINUTE, ${ACTIVITY_SQL}, CURRENT_TIMESTAMP) AS idle_minutes
        FROM table_sessions s JOIN tables t ON t.id = s.table_id
       WHERE s.tenant_id = :tenantId ${branchId ? 'AND s.branch_id = :branchId' : ''}
         AND s.status IN ('OPEN','ORDERING','SERVING','BILL_REQUESTED','PARTIALLY_PAID','PAID')
@@ -286,7 +336,7 @@ module.exports = {
   listTables, findTable, findTableByCode, createTable, updateTable, setTableStatus, softDeleteTable,
   createQrToken, rotateQrToken, revokeQrTokens, resolveActiveToken,
   findActiveSessionByTable, findSessionById, lockSession, setSessionAmounts, findSessionByPublicId, createSession, setSessionStatus,
-  assignWaiter, touchSession, listOpenSessions,
+  assignWaiter, touchSession, listOpenSessions, listHousekeepingCandidates, housekeepingFacts, sessionIdleMinutes,
   addParticipant, listParticipants, findParticipant, findParticipantByPublicId, removeParticipant,
   findActiveParticipantByName, findGuestAccess,
 };

@@ -31,6 +31,13 @@ const KEYS = {
   // payments:charge a cualquier usuario con el rol "mozo", sin tocar el
   // rol de sistema (que es compartido por todas las empresas).
   'staff.mozo_can_charge': z.boolean(),
+  // Mantenimiento automático de mesas (falla 8, parte 2A — ver
+  // tables.housekeeping.js). Una mesa CON SALDO nunca se cierra sola.
+  'tables.housekeeping_enabled': z.boolean(),             // default true
+  'tables.auto_release_minutes': z.number().int().min(5).max(720),   // sin consumo → se libera (default 60)
+  'tables.paid_autoclose_minutes': z.number().int().min(5).max(720), // saldada → se cierra (default 30)
+  'tables.stale_hours': z.number().int().min(1).max(48),            // con saldo → "colgada" (default 3)
+  'tables.day_close_hour': z.number().int().min(0).max(23).nullable(), // hora local de cierre del día (default 4; null = sin cierre del día)
 };
 
 const router = express.Router();
