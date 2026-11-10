@@ -32,4 +32,5 @@ Regla: una por vez, con test que falle antes, suite completa e informe; no empez
 - `.env` de la raíz apunta a `127.0.0.1:3307`, ocupado por `mysql_local` (otro proyecto: no tocar).
 - Probar con un MySQL descartable en otro puerto y `DB_*` por variable de entorno (dotenv no las pisa).
 - Firebase: dejar `FIREBASE_SERVICE_ACCOUNT*` vacías o usar un preload que simule `firebase-admin`.
+- Pendiente del dueño: agregar `https://localhost` a `CORS_ORIGINS` en Render (app Android) y regenerar el APK.
 - Pendiente del dueño: revisar en la consola de Firebase si quedaron usuarios `test-*` de la corrida del 2026-10-30.

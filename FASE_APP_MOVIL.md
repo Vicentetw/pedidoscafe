@@ -36,7 +36,9 @@ nada — eso fue una decisión de diseño explícita del propio `prompt.txt`
 3. Se instala como cualquier app, con su ícono (por ahora el genérico de
    Capacitor — ver "Pendiente" más abajo).
 
-## Importante: por ahora sólo funciona en la MISMA red que esta PC
+> **Actualización 2026-11-10:** la app ya apunta a producción (`https://pedidoscafe.onrender.com`). Requiere `https://localhost` en `CORS_ORIGINS` de Render. Lo de abajo aplica sólo para probar contra un backend local.
+
+## (Histórico) Por ahora sólo funciona en la MISMA red que esta PC
 
 El APK de debug apunta a `http://172.155.0.252:3001` — la IP de esta PC en
 su red. Para que el celular pueda cobrar/tomar pedidos de verdad:

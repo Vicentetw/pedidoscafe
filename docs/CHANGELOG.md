@@ -2,6 +2,11 @@
 
 Historial anterior: `git log` y `FASE*.md`.
 
+## 2026-11-10 — app Android apunta a producción (publicado)
+- `environment.mobile.ts`: `backendUrl` pasa de la IP local `http://172.155.0.252:3001` a `https://pedidoscafe.onrender.com`.
+- Requiere en Render `CORS_ORIGINS` con `https://localhost` (origen del WebView de Capacitor). Pendiente del dueño.
+- Hay que regenerar el APK (`FASE_APP_MOVIL.md`, con JDK 21).
+
 ## 2026-11-10 — falla 8, parte 1: base de 10 MB y conexiones (publicado)
 Medido: el esquema vacío ocupa 4,23 MB y ~900 pedidos llenan los 10 MB (~6 KB por pedido); `domain_events` era la tabla más grande y nadie la lee.
 - `events/outbox.js` `purgeDispatched`: borra eventos ya despachados con más de 7 días, de a lotes; nunca los no despachados.
